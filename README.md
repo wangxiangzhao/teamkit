@@ -217,3 +217,5 @@ Reports role files present, Skill files found and clearly marks **unverified** n
 TeamKit bundles **SwiftUI Pro** by Paul Hudson, MIT licensed, pinned to upstream commit `f2920b63995263f57b3e198674e89a602efba6d2`. All Markdown reference files and the original license are included, not just the entrypoint. `teamkit onboard` installs it only when missing and preserves existing overrides. Read `.agents/skills/swiftui-pro/UPSTREAM.json` for provenance. Existing project deployment targets, toolchain constraints and original `AGENTS.md` take precedence over suggestions for newer APIs.
 
 This review covers manifest, license, known unsafe command patterns, packaging, and install behavior. Real model output quality requires comparison on representative projects and is not claimed from static checks.
+
+See [License and third-party audit](docs/LICENSE_AUDIT.md) for project vs vendored Skill permissions.
