@@ -119,6 +119,7 @@ def onboard(project: Path, *, dry_run: bool = False) -> dict:
                                                   "-scheme", selected["scheme"],
                                                   "-configuration", "Debug",
                                                   "-destination", "generic/platform=iOS Simulator",
+                                                  "-derivedDataPath", ".teamkit/xcode-derived",
                                                   "CODE_SIGNING_ALLOWED=NO", "build"]
                         json_write(gates_file, gates)
         # SwiftPM-only projects should not need hand-edited gates.json.

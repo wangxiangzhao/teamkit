@@ -1,13 +1,13 @@
 """Persistent deterministic DAG scheduling. Codex Master owns real model dispatch."""
 from __future__ import annotations
 import re
-import hashlib
+import os
 import fcntl
 from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
 from typing import Any
-from .core import json_read, json_write, now, route_task
+from .core import _fingerprint, json_read, json_write, now, route_task
 
 STATES = {"pending", "ready", "running", "completed", "failed", "blocked", "skipped"}
 ALLOWED = {
@@ -16,7 +16,7 @@ ALLOWED = {
     "running": {"completed", "failed", "blocked"},
     "failed": {"ready", "blocked"},
     "blocked": {"ready", "skipped"},
-    "completed": set(), "skipped": set(),
+    "completed": {"ready"}, "skipped": set(),
 }
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
 
@@ -25,7 +25,9 @@ def _storage(project: Path, task_id: str) -> Path:
     if not NAME.fullmatch(task_id):
         raise ValueError("Invalid task ID")
     base = project.resolve() / ".teamkit"
-    if not (base / "project.json").exists():
+    if base.is_symlink() or (base / "project.json").is_symlink():
+        raise ValueError("Unsafe project metadata")
+    if not (base / "project.json").is_file():
         raise FileNotFoundError("Initialize project first")
     path = base / "plans" / f"{task_id}.json"
     if path.parent.is_symlink() or path.is_symlink():
@@ -61,7 +63,6 @@ def _project_lock(project: Path):
     if base.is_symlink() or not (base / "project.json").is_file():
         raise ValueError("Unsafe or uninitialized project metadata")
     lock = base / "scheduler.lock"
-    import os
     fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "rb+") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
@@ -79,7 +80,7 @@ def _serialized(fn):
     return wrapped
 
 
-def _running(project: Path, excluding_task: str, excluding_node: str = "") -> list:
+def _running(project: Path) -> list:
     base = project.resolve() / ".teamkit/plans"
     if base.is_symlink():
         raise ValueError("Unsafe plan directory")
@@ -89,7 +90,7 @@ def _running(project: Path, excluding_task: str, excluding_node: str = "") -> li
             raise ValueError("Unsafe plan file")
         plan = json_read(file)
         for node in plan["nodes"]:
-            if node["status"] == "running" and not (plan["task_id"] == excluding_task and node["id"] == excluding_node):
+            if node["status"] == "running":
                 out.append(node)
     return out
 
@@ -101,9 +102,30 @@ def _evidence(project: Path, references: list[str]) -> list[dict]:
         path = root / ref
         if Path(ref).is_absolute() or ".." in Path(ref).parts or not path.resolve().is_relative_to(root) or path.is_symlink() or not path.is_file():
             raise ValueError("Evidence must be an existing local project file: " + ref)
-        from .core import _fingerprint
         result.append({"path": ref, "sha256": _fingerprint(path)})
     return result
+
+
+def _current_completions(project: Path, nodes: list[dict]) -> dict[str, bool]:
+    by_id = {node["id"]: node for node in nodes}
+    current = {}
+
+    def is_current(node_id: str) -> bool:
+        if node_id not in current:
+            node = by_id[node_id]
+            references = node["evidence"]
+            current[node_id] = False
+            if node["status"] == "completed" and references:
+                try:
+                    current[node_id] = (
+                        all(is_current(dep) for dep in node["depends_on"])
+                        and _evidence(project, [ref["path"] for ref in references]) == references
+                    )
+                except (OSError, ValueError):
+                    pass
+        return current[node_id]
+
+    return {node_id: is_current(node_id) for node_id in by_id}
 
 
 @_serialized
@@ -149,14 +171,14 @@ def ready_nodes(project: Path, task_id: str, max_running: int = 2) -> dict:
         raise ValueError("concurrency must be within 1..4")
     plan = get_plan(project, task_id)
     nodes = plan["nodes"]
-    by_id = {n["id"]: n for n in nodes}
-    active = _running(project, task_id)
+    current = _current_completions(project, nodes)
+    active = _running(project)
     capacity = max(0, max_running - len(active))
     ready = []
     for n in nodes:
         if n["status"] not in {"pending", "ready"} and not (n["status"] == "failed" and n.get("retry_eligible")):
             continue
-        if not all(by_id[k]["status"] == "completed" for k in n["depends_on"]):
+        if not all(current[k] for k in n["depends_on"]):
             continue
         if any(_conflict(n.get("paths", []), other.get("paths", [])) for other in active + ready):
             continue
@@ -179,9 +201,30 @@ def update_node(project: Path, task_id: str, node_id: str, status: str, *, paths
     previous = node["status"]
     if status not in ALLOWED[previous]:
         raise ValueError(f"Disallowed transition {previous} -> {status}")
-    if status in {"ready", "running"} and any(by_id[k]["status"] != "completed" for k in node["depends_on"]):
-        raise ValueError("Dependencies have not completed")
+    if status in {"ready", "running", "completed"}:
+        current = _current_completions(project, plan["nodes"])
+        if not all(current[dep] for dep in node["depends_on"]):
+            raise ValueError("Dependencies require current completion evidence")
+        if previous == "completed":
+            if current[node_id]:
+                raise ValueError("Completion evidence is still current")
+            dependents = {node_id}
+            while True:
+                descendants = {item["id"] for item in plan["nodes"]
+                               if dependents.intersection(item["depends_on"])}
+                if descendants <= dependents:
+                    break
+                dependents.update(descendants)
+            for item in plan["nodes"]:
+                if item["id"] in dependents and item["status"] == "running":
+                    raise ValueError("Resolve running dependent work before reopening")
+                if item["id"] in dependents and item["status"] == "completed":
+                    item.update(status="pending", evidence=[], attempts=0, updated_at=now(),
+                                note="Completion invalidated by reopened dependency")
+
     if paths is not None:
+        if previous == "running":
+            raise ValueError("Cannot change path ownership while running")
         if any(not isinstance(p, str) or not p or p.startswith("/") or ".." in Path(p).parts for p in paths):
             raise ValueError("Unsafe path scope")
         root = project.resolve()
@@ -190,7 +233,7 @@ def update_node(project: Path, task_id: str, node_id: str, status: str, *, paths
             raise ValueError("Path scope escapes project")
         node["paths"] = sorted(set(p.relative_to(root).as_posix() for p in canonical))
     if status == "running":
-        active = _running(project, task_id, node_id)
+        active = _running(project)
         if len(active) >= 4:
             raise ValueError("Project concurrency limit reached")
         if any(_conflict(node["paths"], n.get("paths", [])) for n in active):
@@ -202,8 +245,8 @@ def update_node(project: Path, task_id: str, node_id: str, status: str, *, paths
         raise ValueError("Completion requires actual evidence references")
     verified = _evidence(project, evidence) if evidence else []
     node.update(status=status, updated_at=now(), note=note)
-    if verified:
-        node["evidence"].extend(verified)
+    if status == "completed":
+        node["evidence"] = verified
     if status == "failed" and node["attempts"] < 3:
         node["retry_eligible"] = True
     elif status == "failed":
@@ -214,5 +257,7 @@ def update_node(project: Path, task_id: str, node_id: str, status: str, *, paths
 
 def summarize_plan(project: Path, task_id: str) -> dict[str, Any]:
     plan = get_plan(project, task_id)
+    current = _current_completions(project, plan["nodes"])
+    stale = [n["id"] for n in plan["nodes"] if n["status"] == "completed" and not current[n["id"]]]
     counts = {state: sum(n["status"] == state for n in plan["nodes"]) for state in STATES}
-    return {"task_id": task_id, "task": plan["task"], "statuses": counts, "unfinished": [n["id"] for n in plan["nodes"] if n["status"] not in {"completed", "skipped"}], "next": ready_nodes(project, task_id)}
+    return {"task_id": task_id, "task": plan["task"], "statuses": counts, "stale_completions": stale, "unfinished": [n["id"] for n in plan["nodes"] if n["status"] not in {"completed", "skipped"} or n["id"] in stale], "next": ready_nodes(project, task_id)}

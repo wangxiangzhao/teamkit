@@ -59,7 +59,10 @@ def test_refuse_existing_foreign_metadata(tmp_path):
     assert (folder/'custom.txt').read_text()=='mine'
 from teamkit.cli import main
 
-def test_onboarding_cli(tmp_path):
+def test_onboarding_cli(tmp_path, monkeypatch):
+    install_home = tmp_path / "install-home"
+    install_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: install_home))
     (tmp_path/'Feature.swift').write_text('struct Feature {}')
     assert main(['onboard','--project',str(tmp_path),'--dry-run'])==0
     assert main(['onboard','--project',str(tmp_path)])==0
@@ -75,4 +78,6 @@ def test_autoconfig_build_only_for_explicit_ios_scheme(tmp_path):
     gates=json_read(tmp_path/'.teamkit/gates.json')
     assert gates['build_command'][-1]=='build'
     assert 'generic/platform=iOS Simulator' in gates['build_command']
+    argv = gates["build_command"]
+    assert argv[argv.index("-derivedDataPath") + 1] == ".teamkit/xcode-derived"
     assert gates['test_command'] is None
