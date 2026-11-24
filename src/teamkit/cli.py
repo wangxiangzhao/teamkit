@@ -28,44 +28,110 @@ ASSETS = Path(__file__).resolve().parent / "assets"
 
 
 def install(home: Path, *, dry_run: bool = False, repair_legacy: bool = False) -> dict:
-    """Install only TeamKit-owned files; never overwrite user customizations."""
+    """Install only missing bundled files, refusing symlinked destinations.
+
+    Uses exclusive file creation so pre-existing user content is never replaced.
+    Unmodified 0.1 role repairs are separately backed up.
+    """
+    import os
     source = ASSETS / "agents"
-    target = home.expanduser().resolve() / ".codex" / "agents"
-    installed, skipped, repaired = [], [], []
-    for item in sorted(source.glob("*.toml")):
-        dest = target / item.name
+    home = home.expanduser().resolve()
+    installed, skipped, repaired, warnings = [], [], [], []
+
+    def safe_parent(parts):
+        current = home
+        for part in parts:
+            current = current / part
+            if current.is_symlink() or (current.exists() and not current.is_dir()):
+                return None
+            if not dry_run:
+                current.mkdir(exist_ok=True)
+        return current
+
+    def create_exclusive(dest, content):
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            fd = os.open(dest, flags, 0o644)
+        except FileExistsError:
+            return False
+        with os.fdopen(fd, "wb") as out:
+            out.write(content)
+        return True
+
+    def copy_missing(item, parts):
+        parent = safe_parent(parts)
+        dest = home.joinpath(*parts, item.name)
+        if parent is None or dest.is_symlink():
+            warnings.append(f"Unsafe symlink or non-directory destination: {dest}")
+            skipped.append(str(dest))
+            return
         if dest.exists():
-            existing = dest.read_text(encoding="utf-8") if dest.is_file() and not dest.is_symlink() else None
-            bundled = item.read_text(encoding="utf-8")
-            previous = bundled.split("\n", 1)[1] if bundled.startswith('name = "') else None
-            if repair_legacy and existing is not None and previous is not None and existing == previous:
-                backup = home.expanduser().resolve() / ".codex" / "teamkit-backups" / "agents" / item.name
-                if backup.exists():
+            skipped.append(str(dest))
+            return
+        if dry_run or create_exclusive(dest, item.read_bytes()):
+            installed.append(str(dest))
+        else:
+            skipped.append(str(dest))
+
+    for item in sorted(source.glob("*.toml")):
+        dest = home / ".codex" / "agents" / item.name
+        if repair_legacy and dest.is_file() and not dest.is_symlink():
+            bundled = item.read_bytes()
+            prev = bundled.split(b"\\n", 1)[1] if bundled.startswith(b'name = "') else None
+            if prev is not None and dest.read_bytes() == prev:
+                backup_dir = safe_parent([".codex", "teamkit-backups", "agents"])
+                backup = home / ".codex" / "teamkit-backups" / "agents" / item.name
+                if backup_dir is None or backup.is_symlink():
+                    warnings.append(f"Cannot safely back up legacy role: {dest}")
+                    skipped.append(str(dest))
+                    continue
+                if backup.exists() and backup.read_bytes() != prev:
+                    warnings.append(f"Backup conflict for legacy role: {dest}")
                     skipped.append(str(dest))
                     continue
                 if not dry_run:
-                    backup.parent.mkdir(parents=True, exist_ok=True)
-                    backup.write_text(existing, encoding="utf-8")
-                    dest.write_text(bundled, encoding="utf-8")
+                    if not backup.exists() and not create_exclusive(backup, prev):
+                        warnings.append(f"Unable to create backup: {backup}")
+                        skipped.append(str(dest))
+                        continue
+                    # Avoid repairing when another process altered the role meanwhile.
+                    if dest.read_bytes() != prev:
+                        warnings.append(f"Legacy role changed during repair: {dest}")
+                        skipped.append(str(dest))
+                        continue
+                    # write a unique temporary file and replace the recognized version.
+                    temp = dest.with_name(dest.name + ".teamkit-upgrade")
+                    if temp.exists() or temp.is_symlink():
+                        warnings.append(f"Upgrade temp path exists: {temp}")
+                        skipped.append(str(dest))
+                        continue
+                    if not create_exclusive(temp, bundled):
+                        skipped.append(str(dest))
+                        continue
+                    os.replace(temp, dest)
                 repaired.append(str(dest))
                 continue
-            skipped.append(str(dest))
-            continue
-        if not dry_run:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(item, dest)
-        installed.append(str(dest))
+        copy_missing(item, [".codex", "agents"])
     for skill_file in sorted((ASSETS / "skills").glob("*/SKILL.md")):
-        dest = home.expanduser().resolve() / ".agents" / "skills" / skill_file.parent.name / "SKILL.md"
-        if dest.exists():
+        parent = safe_parent([".agents", "skills", skill_file.parent.name])
+        dest = home / ".agents" / "skills" / skill_file.parent.name / "SKILL.md"
+        if parent is None or dest.is_symlink():
+            warnings.append(f"Unsafe Skill destination: {dest}")
             skipped.append(str(dest))
-            continue
-        if not dry_run:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(skill_file, dest)
-        installed.append(str(dest))
-    return {"status": "dry-run" if dry_run else "completed", "installed": installed, "repaired_legacy_roles": repaired, "skipped_existing": skipped, "warning": "Does not modify ~/.codex/config.toml, credentials, or global AGENTS.md. Verify Codex version and agent support separately."}
-
+        elif dest.exists():
+            skipped.append(str(dest))
+        elif dry_run or create_exclusive(dest, skill_file.read_bytes()):
+            installed.append(str(dest))
+        else:
+            skipped.append(str(dest))
+    return {
+        "status": "dry-run" if dry_run else ("partial" if warnings else "completed"),
+        "installed": installed, "repaired_legacy_roles": repaired,
+        "skipped_existing": skipped, "warnings": warnings,
+        "note": "No overwrite of customized files or Codex config, model, approvals or credentials.",
+    }
 
 def doctor() -> dict:
     return {"teamkit_version": __version__, "python": sys.version.split()[0], "tools": {s: shutil.which(s) for s in ("git", "codex", "xcodebuild", "xcrun", "swift", "rg")}, "note": "Tool presence is not proof of runtime capability. macOS/Xcode integrations require separate validation."}
