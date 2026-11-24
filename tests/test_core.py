@@ -80,3 +80,8 @@ def test_cli_return_codes(tmp_path, capsys):
     assert main(["init", "--project", str(tmp_path)]) == 2
     assert main(["checkpoint", "T-1", "running", "--project", str(tmp_path)]) == 0
     assert main(["resume", "T-1", "--project", str(tmp_path)]) == 0
+
+
+def test_resume_rejects_path_traversal(tmp_path):
+    init_project(tmp_path)
+    assert main(["resume", "../escape", "--project", str(tmp_path)]) == 2
