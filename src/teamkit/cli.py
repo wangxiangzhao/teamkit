@@ -29,6 +29,15 @@ def install(home: Path, *, dry_run: bool = False) -> dict:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(item, dest)
         installed.append(str(dest))
+    for skill_file in sorted((ASSETS / "skills").glob("*/SKILL.md")):
+        dest = home.expanduser().resolve() / ".agents" / "skills" / skill_file.parent.name / "SKILL.md"
+        if dest.exists():
+            skipped.append(str(dest))
+            continue
+        if not dry_run:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(skill_file, dest)
+        installed.append(str(dest))
     return {"status": "dry-run" if dry_run else "completed", "installed": installed, "skipped_existing": skipped, "warning": "Does not modify ~/.codex/config.toml, credentials, or global AGENTS.md. Verify Codex version and agent support separately."}
 
 
