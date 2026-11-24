@@ -442,6 +442,8 @@ def main(argv: list[str] | None = None) -> int:
                 "notice": "Connected tools are not equivalent to live authenticated agent/Figma verification.",
             }
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        if args.command == "gate" and result["status"] == "not-run":
+            return 1
         return 1 if result.get("status") in {"failed", "blocked"} else 0
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
