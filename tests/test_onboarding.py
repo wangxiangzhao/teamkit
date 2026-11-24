@@ -23,6 +23,8 @@ def test_onboarding_one_command_preserves_project(tmp_path):
     assert result['status']=='ready'
     assert result['xcode_scheme']['scheme']=='Example'
     assert source.read_text()=='let a = 1'
+    from teamkit.core import check_project
+    assert check_project(tmp_path)['status']=='passed'
     assert 'Do not change signing.' in old.read_text()
     assert onboard(tmp_path)['status']=='ready'
     detach(tmp_path)
@@ -62,3 +64,15 @@ def test_onboarding_cli(tmp_path):
     assert main(['onboard','--project',str(tmp_path),'--dry-run'])==0
     assert main(['onboard','--project',str(tmp_path)])==0
     assert main(['detach','--project',str(tmp_path)])==0
+
+
+def test_autoconfig_build_only_for_explicit_ios_scheme(tmp_path):
+    _scheme(tmp_path,'Example')
+    pbx=tmp_path/'Example.xcodeproj/project.pbxproj'
+    pbx.write_text('SDKROOT = iphoneos;')
+    from teamkit.core import json_read
+    onboard(tmp_path)
+    gates=json_read(tmp_path/'.teamkit/gates.json')
+    assert gates['build_command'][-1]=='build'
+    assert 'generic/platform=iOS Simulator' in gates['build_command']
+    assert gates['test_command'] is None

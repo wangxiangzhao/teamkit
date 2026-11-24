@@ -98,6 +98,25 @@ def onboard(project: Path, *, dry_run: bool = False) -> dict:
             init_project(root)
             initialized_here = True
         schemes = preview["shared_schemes"]
+        # Auto-configure safe simulator build argv only when one shared scheme
+        # and explicit iOS SDK indicators are present. Never execute on onboarding.
+        if not schemes["ambiguous"]:
+            selected = schemes["candidates"][0]
+            xcodeproj = selected["container"] if selected["kind"] == "project" else None
+            pbx = root / xcodeproj / "project.pbxproj" if xcodeproj else None
+            if pbx and pbx.is_file() and not pbx.is_symlink():
+                content = pbx.read_text(encoding="utf-8", errors="replace")
+                if "iphoneos" in content or "iphonesimulator" in content:
+                    gates_file = root / ".teamkit" / "gates.json"
+                    gates = json_read(gates_file, {})
+                    if gates.get("build_command") is None:
+                        gates["build_command"] = ["xcodebuild", "-project", xcodeproj,
+                                                  "-scheme", selected["scheme"],
+                                                  "-configuration", "Debug",
+                                                  "-destination", "generic/platform=iOS Simulator",
+                                                  "CODE_SIGNING_ALLOWED=NO", "build"]
+                        json_write(gates_file, gates)
+        # Automatic configuration never means the build was actually run.
         # Store discovery as an informational hint, not as a falsely verified build gate.
         workspace = root / ".teamkit"
         json_write(workspace / "discovery.json", {
@@ -108,6 +127,9 @@ def onboard(project: Path, *, dry_run: bool = False) -> dict:
             "notes": "Build and simulator compatibility require real execution; no scheme is guessed when ambiguous.",
         })
         activated = activate(root, approve=True)
+        # Establish the baseline *after* adding the optional AGENTS hook.
+        # Otherwise the first 'teamkit check' incorrectly reports the hook as a user change.
+        sync_project(root)
         return {
             "status": "ready",
             "project": str(root),
