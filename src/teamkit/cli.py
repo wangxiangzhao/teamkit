@@ -24,14 +24,28 @@ from .core import (ROUTES, check_project, checkpoint, context_index, extend_proj
 ASSETS = Path(__file__).resolve().parent / "assets"
 
 
-def install(home: Path, *, dry_run: bool = False) -> dict:
+def install(home: Path, *, dry_run: bool = False, repair_legacy: bool = False) -> dict:
     """Install only TeamKit-owned files; never overwrite user customizations."""
     source = ASSETS / "agents"
     target = home.expanduser().resolve() / ".codex" / "agents"
-    installed, skipped = [], []
+    installed, skipped, repaired = [], [], []
     for item in sorted(source.glob("*.toml")):
         dest = target / item.name
         if dest.exists():
+            existing = dest.read_text(encoding="utf-8") if dest.is_file() and not dest.is_symlink() else None
+            bundled = item.read_text(encoding="utf-8")
+            previous = bundled.split("\n", 1)[1] if bundled.startswith('name = "') else None
+            if repair_legacy and existing is not None and previous is not None and existing == previous:
+                backup = home.expanduser().resolve() / ".codex" / "teamkit-backups" / "agents" / item.name
+                if backup.exists():
+                    skipped.append(str(dest))
+                    continue
+                if not dry_run:
+                    backup.parent.mkdir(parents=True, exist_ok=True)
+                    backup.write_text(existing, encoding="utf-8")
+                    dest.write_text(bundled, encoding="utf-8")
+                repaired.append(str(dest))
+                continue
             skipped.append(str(dest))
             continue
         if not dry_run:
@@ -47,7 +61,7 @@ def install(home: Path, *, dry_run: bool = False) -> dict:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(skill_file, dest)
         installed.append(str(dest))
-    return {"status": "dry-run" if dry_run else "completed", "installed": installed, "skipped_existing": skipped, "warning": "Does not modify ~/.codex/config.toml, credentials, or global AGENTS.md. Verify Codex version and agent support separately."}
+    return {"status": "dry-run" if dry_run else "completed", "installed": installed, "repaired_legacy_roles": repaired, "skipped_existing": skipped, "warning": "Does not modify ~/.codex/config.toml, credentials, or global AGENTS.md. Verify Codex version and agent support separately."}
 
 
 def doctor() -> dict:
@@ -61,6 +75,7 @@ def build_parser() -> argparse.ArgumentParser:
     inst = subs.add_parser("install", help="Safely copy missing Agent TOML files")
     inst.add_argument("--home", type=Path, default=Path.home())
     inst.add_argument("--dry-run", action="store_true")
+    inst.add_argument("--repair-legacy-roles", action="store_true", help="Back up and repair unmodified v0.1 roles")
     subs.add_parser("doctor", help="Inspect local tool availability")
     for name in ("init", "sync", "status", "check"):
         s = subs.add_parser(name)
@@ -161,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         if args.command == "install":
-            result = install(args.home, dry_run=args.dry_run)
+            result = install(args.home, dry_run=args.dry_run, repair_legacy=args.repair_legacy_roles)
         elif args.command == "doctor":
             result = doctor()
         elif args.command == "init":
