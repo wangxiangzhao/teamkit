@@ -14,6 +14,7 @@ from .activation import activate, deactivate, START, END
 from .core import init_project, json_read, json_write, project_status, sync_project
 from .audit import safe_maintain
 from .native import probe_native
+from .project_inspect import inspect_project
 
 
 def _discover_shared_schemes(project: Path) -> dict:
@@ -144,9 +145,11 @@ def onboard(project: Path, *, dry_run: bool = False) -> dict:
         # Otherwise the first 'teamkit check' incorrectly reports the hook as a user change.
         sync_project(root)
         maintenance = safe_maintain(root)
+        project_insights = inspect_project(root)
         return {
             "status": "ready",
             "self_audit": maintenance,
+            "project_insights": project_insights,
             "project": str(root),
             "initialized": initialized_here,
             "activation": activated["status"],
