@@ -1,5 +1,8 @@
 from pathlib import Path
-import tomllib
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 import teamkit
 from teamkit import __version__
 
