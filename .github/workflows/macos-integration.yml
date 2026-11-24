@@ -31,22 +31,25 @@ jobs:
           teamkit onboard
           teamkit check
           teamkit capabilities
-      - name: Execute real iOS Simulator SDK build through TeamKit gate
+      - name: Verify zero-configuration SwiftPM build/test gates
         run: |
           python3 - <<'PY'
-          import pathlib
-          from teamkit.core import json_read, json_write
-          base = pathlib.Path("tests/fixtures/SwiftSmoke/.teamkit")
-          cfg = json_read(base / "gates.json")
-          cfg["build_command"] = ["xcodebuild", "-scheme", "TeamKitSmoke",
-              "-destination", "generic/platform=iOS Simulator",
-              "-derivedDataPath", "/tmp/teamkit-macos-ci-derived",
-              "CODE_SIGNING_ALLOWED=NO", "build"]
-          cfg["test_command"] = ["swift", "test"]
-          json_write(base / "gates.json", cfg)
+          import json
+          from pathlib import Path
+          cfg=json.loads(Path("tests/fixtures/SwiftSmoke/.teamkit/gates.json").read_text())
+          assert cfg["build_command"][0:2] == ["swift", "build"]
+          assert cfg["test_command"][0:2] == ["swift", "test"]
+          assert "--scratch-path" in cfg["build_command"]
           PY
           teamkit gate build --project tests/fixtures/SwiftSmoke --approve-command --timeout 900
           teamkit gate test --project tests/fixtures/SwiftSmoke --approve-command --timeout 900
+      - name: Real iOS Simulator SDK build (no signing, isolated DerivedData)
+        run: |
+          cd tests/fixtures/SwiftSmoke
+          xcodebuild -scheme TeamKitSmoke \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/teamkit-derived" \
+            CODE_SIGNING_ALLOWED=NO build
       - name: Snapshot test evidence and report honest scope
         if: always()
         run: |

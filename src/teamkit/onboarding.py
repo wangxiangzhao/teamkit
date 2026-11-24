@@ -118,6 +118,17 @@ def onboard(project: Path, *, dry_run: bool = False) -> dict:
                                                   "-destination", "generic/platform=iOS Simulator",
                                                   "CODE_SIGNING_ALLOWED=NO", "build"]
                         json_write(gates_file, gates)
+        # SwiftPM-only projects should not need hand-edited gates.json.
+        # The scratch path lives inside TeamKit metadata, not .build in source.
+        if not schemes["candidates"] and (root / "Package.swift").is_file():
+            gates_file = root / ".teamkit" / "gates.json"
+            gates = json_read(gates_file, {})
+            scratch = ".teamkit/swift-build"
+            if gates.get("build_command") is None:
+                gates["build_command"] = ["swift", "build", "--scratch-path", scratch]
+            if gates.get("test_command") is None and (root / "Tests").is_dir():
+                gates["test_command"] = ["swift", "test", "--scratch-path", scratch]
+            json_write(gates_file, gates)
         # Automatic configuration never means the build was actually run.
         # Store discovery as an informational hint, not as a falsely verified build gate.
         workspace = root / ".teamkit"
