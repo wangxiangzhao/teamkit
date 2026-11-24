@@ -52,7 +52,8 @@ def audit_skills(project: Path, *, home: Path | None = None) -> dict:
     locations=[user/".agents/skills",user/".codex/skills",
                root/".agents/skills",root/".codex/skills"]
     seen={}
-    for folder in locations[::-1]:
+    # Project-local Skills override global entries with the same name.
+    for folder in locations:
         if not folder.is_dir() or folder.is_symlink():
             continue
         for skill in sorted(folder.iterdir()):
