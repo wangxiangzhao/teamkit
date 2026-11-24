@@ -20,6 +20,8 @@ The installer creates only missing role and Skill files under `~/.codex/agents/`
 ```bash
 cd /path/to/your/project
 teamkit init
+teamkit activate                 # dry-run
+teamkit activate --approve       # enables project-local automatic routing
 teamkit status
 teamkit modules
 teamkit compile-context Reader
@@ -77,3 +79,12 @@ ROAS CSV needs independent `cohort,spend,revenue,days_observed,currency` columns
 Run `python3 -m pip install pytest && python3 -m pytest -q`.
 
 See [V1 scope](docs/V1_SCOPE.md) for the distinction between local core coverage and real-device verification.
+
+## Activate for ordinary interactive Codex sessions
+
+```bash
+teamkit activate --approve
+codex
+```
+
+Activation appends a short, delimited policy to the project's existing `AGENTS.md` and writes a one-time backup if the file existed. `teamkit deactivate --approve` removes only TeamKit's policy. This is **instruction-guided native Codex delegation**, not an external automatic agent scheduler; the installed runtime must support subagents. No global `AGENTS.md` is modified.

@@ -15,6 +15,7 @@ from .quality import scan_assets, run_gate, check_release
 from .metrics import record as record_metrics, summary as metrics_summary, roas_csv
 from .dispatch import run as dispatch_run
 from .skill_sources import candidates
+from .activation import activate, deactivate
 from .skill_sources import candidates
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -137,6 +138,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--intent", choices=sorted(ROUTES))
     run.add_argument("--approve-execution", action="store_true")
     run.add_argument("--timeout", type=int, default=3600)
+    on = subs.add_parser("activate", help="Opt-in project Master instructions")
+    on.add_argument("--project", type=Path, default=Path.cwd())
+    on.add_argument("--approve", action="store_true")
+    off = subs.add_parser("deactivate", help="Remove TeamKit instructions only")
+    off.add_argument("--project", type=Path, default=Path.cwd())
+    off.add_argument("--approve", action="store_true")
     return p
 
 
@@ -204,6 +211,10 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "run":
             result = dispatch_run(args.project, args.description, approve=args.approve_execution,
                                   timeout=args.timeout, module=args.module, intent=args.intent)
+        elif args.command == "activate":
+            result = activate(args.project, approve=args.approve)
+        elif args.command == "deactivate":
+            result = deactivate(args.project, approve=args.approve)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
