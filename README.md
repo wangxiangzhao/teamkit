@@ -131,7 +131,7 @@ teamkit metrics
 teamkit metrics --task-id TASK-1 --input-tokens 10000 --output-tokens 3000
 ```
 
-ROAS CSV needs independent `cohort,spend,revenue,days_observed,currency` columns, where revenue is cumulative through the requested observation window. Incomplete cohorts are excluded. Metrics are explicitly user/tool reported, not auto-detected.
+ROAS CSV needs independent `cohort,spend,revenue,days_observed,currency` columns, where revenue is cumulative through the requested observation window. Incomplete cohorts are excluded. Metrics are explicitly user/tool reported, not auto-detected. Optional `other_costs` and `acquired_users` enable observed cohort profit (revenue minus spend and other costs) and revenue per acquired user for that window. Each aggregate requires complete inputs for its eligible cohorts. Use an explicit zero for confirmed zero costs.
 
 ## Coverage and limitations
 

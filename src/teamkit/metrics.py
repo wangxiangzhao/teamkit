@@ -45,6 +45,18 @@ def summary(project: Path) -> dict:
             'warning': 'Missing token measurements are not imputed'}
 
 
+def _optional_decimal(value: str | None, column: str) -> Decimal | None:
+    if value in (None, ''):
+        return None
+    try:
+        number = Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError(f'Invalid {column}') from exc
+    if not number.is_finite() or number < 0:
+        raise ValueError(f'{column} must be finite and nonnegative')
+    return number
+
+
 def roas_csv(csv_path: Path, *, window: int = 30) -> dict:
     if window < 0 or window > 365:
         raise ValueError('Invalid ROAS observation window')
@@ -76,19 +88,40 @@ def roas_csv(csv_path: Path, *, window: int = 30) -> dict:
                 'cohort_not_mature' if observed < window else 'revenue_not_at_requested_window'
             )
             ratio = round(rev / spend, 6) if spend and eligible else None
+            costs = _optional_decimal(row.get('other_costs'), 'other_costs')
+            acquired_raw = row.get('acquired_users')
+            acquired = None
+            if acquired_raw not in (None, ''):
+                if not re.fullmatch(r'[0-9]+', acquired_raw):
+                    raise ValueError('acquired_users must be a nonnegative integer')
+                acquired = int(acquired_raw)
+            profit = rev - spend - costs if eligible and costs is not None else None
+            ltv = round(rev / acquired, 6) if eligible and acquired else None
             rows.append({'cohort': row['cohort'], 'currency': row.get('currency') or 'unspecified',
                          'spend': str(spend), 'revenue': str(rev),
                          'days_observed': observed, 'revenue_as_of_day': revenue_as_of_day,
                          'd_window_roas': str(ratio) if ratio is not None else None,
-                         'complete_window': eligible, 'excluded_reason': reason})
+                         'complete_window': eligible, 'excluded_reason': reason,
+                         'other_costs': str(costs) if costs is not None else None,
+                         'acquired_users': acquired,
+                         'd_window_profit': str(profit) if profit is not None else None,
+                         'd_window_revenue_per_acquired_user': str(ltv) if ltv is not None else None})
     currencies = set(r['currency'] for r in rows)
     if len(currencies) > 1:
         raise ValueError('Mixed currencies; normalize before aggregating')
     complete = [r for r in rows if r['complete_window']]
     total_spend = sum(Decimal(r['spend']) for r in complete)
     total_rev = sum(Decimal(r['revenue']) for r in complete)
+    costs_complete = bool(complete) and all(r['other_costs'] is not None for r in complete)
+    total_costs = sum(Decimal(r['other_costs']) for r in complete) if costs_complete else None
+    users_complete = bool(complete) and all(r['acquired_users'] is not None for r in complete)
+    total_users = sum(r['acquired_users'] for r in complete) if users_complete else None
     return {'window_days': window, 'cohorts': rows, 'complete_cohorts': len(complete),
             'total_spend': str(total_spend), 'total_revenue': str(total_rev),
             'aggregate_roas': str(round(total_rev / total_spend, 6)) if total_spend else None,
+            'total_other_costs': str(total_costs) if total_costs is not None else None,
+            'total_acquired_users': total_users,
+            'aggregate_profit': str(total_rev - total_spend - total_costs) if total_costs is not None else None,
+            'aggregate_revenue_per_acquired_user': str(round(total_rev / total_users, 6)) if total_users else None,
             'currency': next(iter(currencies), 'unspecified'),
             'warning': 'Revenue must be explicitly scoped to requested D-window; immature or mismatched cohorts excluded'}
