@@ -1,3 +1,31 @@
+# TeamKit — 一键自动接入 Codex 项目
+
+> 安装 TeamKit 工具本身一次后，每个已有项目只需执行 **`teamkit onboard`**。无需依次执行 `install`、`init`、`activate`、`attach` 或手动修改 JSON/TOML。
+
+```bash
+cd /path/to/existing/ios-project
+teamkit onboard
+```
+
+**onboard 自动完成：** 安全识别现有项目与 Xcode 共享 Scheme；保留原有 AGENTS.md 并追加可撤销的 TeamKit 区块；安装缺失的内置 8 个角色和 6 个基础 Skills（只补缺，不覆盖）；扫描模块、执行基础自查；生成 Agent/Skill 实际存在性映射；输出当前正在运行的 Codex 可直接读取的接入指令。重复执行不会覆盖已有用户定制配置。
+
+**已有 Codex 会话：** 不需要退出、清除上下文或重新登录。若通过当前 Codex 会话执行该命令，工具输出就包含继续当前任务所需信息。若在另一个终端执行，不能保证自动向任意正在运行的 TUI 注入消息，也不保证新角色即时热注册；这里会明确报告而不虚报。
+
+**边界：** 不修改 Swift/ObjC 源码、Xcode 工程配置、签名、Podfile、认证、模型或沙盒策略。正常接入会创建 TeamKit 自有元数据并向现有 AGENTS.md 追加可回滚规则。首次安装 TeamKit CLI 本身仍是一次性的系统操作，可按下面安装指引完成。外部第三方 Skills 需审查版权、风险、版本和真实功能后才能自动启用，不会盲目执行网络脚本。
+
+```bash
+teamkit onboard --dry-run   # 可选：预览将修改的路径
+teamkit detach              # 可选：只移除本项目新增规则
+```
+
+## 商业级能力自查
+
+`teamkit onboard` 会同时返回 `capabilities` 与 `agent_skill_map`：区分“已存在的角色/技能文件”、“实际运行能力是否验证”、“缺失的领域能力”。**已安装 ≠ 已通过真实 Xcode/Figma/多 Agent 商业项目验收**。
+
+具体实现、测试证据和未覆盖项见下文。
+
+---
+
 # TeamKit — one-command project onboarding
 
 Run in any existing iOS project after installing TeamKit:
