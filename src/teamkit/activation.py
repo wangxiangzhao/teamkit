@@ -67,10 +67,21 @@ def activate(project: Path, *, approve: bool = False) -> dict:
     backup = project.resolve() / ".teamkit" / "AGENTS.backup.md"
     if existed and not backup.exists():
         backup.write_bytes(original)
-    path.write_bytes(original + added)
-    metadata.write_text(json.dumps({"version": 2, "original_existed": existed,
-        "original_length": len(original), "original_sha256": _hash(original),
-        "added_sha256": _hash(added), "added_length": len(added)}, indent=2)+"\n")
+    # Commit in a guarded transaction. If the manifest cannot be persisted,
+    # restore the exact original bytes and never strand an unknown insertion.
+    try:
+        path.write_bytes(original + added)
+        metadata.write_text(json.dumps({"version": 2, "original_existed": existed,
+            "original_length": len(original), "original_sha256": _hash(original),
+            "added_sha256": _hash(added), "added_length": len(added)}, indent=2)+"\n")
+    except Exception:
+        if metadata.exists():
+            metadata.unlink()
+        if existed:
+            path.write_bytes(original)
+        elif path.exists():
+            path.unlink()
+        raise
     return {"status": "active", "path": str(path), "original_preserved": True,
             "project_rules_override_teamkit": True}
 
