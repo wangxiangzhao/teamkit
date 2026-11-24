@@ -21,6 +21,7 @@ from .onboarding import onboard, detach
 from .audit import audit_project, safe_maintain
 from .live import attach, capability_report
 from .native import probe_native
+from .figma_contract import contract as figma_contract
 from .skill_resolver import resolve as resolve_project_skills
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -273,6 +274,11 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--project", type=Path, default=Path.cwd())
     native = subs.add_parser("verify-native", help="Probe Codex/Xcode/Swift CLI availability without changing anything")
     native.add_argument("--skip-simulator", action="store_true")
+    figma = subs.add_parser("figma-contract", help="Extract a bounded design contract from Figma node JSON")
+    figma.add_argument("json_file", type=Path)
+    figma.add_argument("--module", required=True)
+    figma.add_argument("--project", type=Path)
+    figma.add_argument("--write", action="store_true")
     return p
 
 
@@ -378,6 +384,8 @@ def main(argv: list[str] | None = None) -> int:
             result = resolve_project_skills(args.project)
         elif args.command == "verify-native":
             result = probe_native(skip_simulator=args.skip_simulator)
+        elif args.command == "figma-contract":
+            result = figma_contract(args.json_file, module=args.module, project=args.project, write=args.write)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
