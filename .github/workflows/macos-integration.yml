@@ -1,8 +1,21 @@
 name: macOS Integration
 on:
   push:
+    paths:
+      - "src/teamkit/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/workflows/macos-integration.yml"
   pull_request:
+    paths:
+      - "src/teamkit/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/workflows/macos-integration.yml"
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   native-tools:
     name: Xcode and Codex CLI bridge
