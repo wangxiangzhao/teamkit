@@ -158,3 +158,28 @@ teamkit gate build --approve-command  # only after configuring build_command
 ```
 
 For the full Mac-native workflow you must configure actual schemes, simulator destination and external MCP connections; `teamkit release` remains blocked until independent evidence is available.
+
+## Attach to a Codex session that is already running
+
+**Do not quit Codex, clear its history or restart its current work.** In a second terminal in the same project:
+
+```bash
+teamkit onboard
+teamkit attach
+```
+
+Copy the printed `prompt` value into the existing Codex conversation as one normal message. The current session can then read the newly installed project instructions without losing its working context. In versions supporting `codex queue`, you can explicitly queue the prompt:
+
+```bash
+teamkit attach --session <session-id> --approve-queue
+```
+
+`attach` is not a live reload API. A running Codex process may not discover newly installed Agent profiles or Skills until a new session. It can still read the files as project context and continue working immediately. Do not claim that role registration is hot-reloaded unless verified in that runtime.
+
+## Check real Agent/Skill coverage
+
+```bash
+teamkit capabilities
+```
+
+Reports role files present, Skill files found and clearly marks **unverified** native dispatch, external Skills, Figma and Xcode integration. Eight role profiles and six bundled Skills do not equal a completed commercial-grade professional skill library.

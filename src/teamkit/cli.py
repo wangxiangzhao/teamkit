@@ -19,6 +19,7 @@ from .activation import activate, deactivate
 from .visual import compare_images, optimize_image
 from .onboarding import onboard, detach
 from .audit import audit_project, safe_maintain
+from .live import attach, capability_report
 from .skill_sources import candidates
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -181,6 +182,13 @@ def build_parser() -> argparse.ArgumentParser:
     aud.add_argument("--project", type=Path, default=Path.cwd())
     maintain = subs.add_parser("maintain", help="Safe automatic upkeep of owned project metadata")
     maintain.add_argument("--project", type=Path, default=Path.cwd())
+    hot = subs.add_parser("attach", help="Prepare or queue live-session TeamKit instructions without restarting Codex")
+    hot.add_argument("--project", type=Path, default=Path.cwd())
+    hot.add_argument("--session", help="Existing Codex session UUID or exact name")
+    hot.add_argument("--approve-queue", action="store_true")
+    caps = subs.add_parser("capabilities", help="Audit installed Agent and Skill files, without claiming runtime activation")
+    caps.add_argument("--project", type=Path, default=Path.cwd())
+    caps.add_argument("--home", type=Path)
     return p
 
 
@@ -264,6 +272,10 @@ def main(argv: list[str] | None = None) -> int:
             result = audit_project(args.project)
         elif args.command == "maintain":
             result = safe_maintain(args.project)
+        elif args.command == "attach":
+            result = attach(args.project, session=args.session, approve_queue=args.approve_queue)
+        elif args.command == "capabilities":
+            result = capability_report(args.project, home=args.home)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
