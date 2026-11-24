@@ -4,11 +4,54 @@ import json
 import shutil
 import subprocess
 import uuid
+import time
 from pathlib import Path
 from .core import json_write, route_task, now
 from .context_engine import compile_context
+from .metrics import record as record_metrics
 
 MAX_OUTPUT = 12000
+
+def parse_codex_jsonl(payload: str) -> dict:
+    """Read usage from turn.completed events, without estimating missing values."""
+    keys = ("input_tokens", "cached_input_tokens", "output_tokens")
+    totals = {key: 0 for key in keys}
+    turns = invalid = 0
+    final_message = None
+    for line in payload.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            invalid += 1
+            continue
+        if not isinstance(event, dict):
+            invalid += 1
+            continue
+        if event.get("type") == "turn.completed":
+            usage = event.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            values = [usage.get(key) for key in keys]
+            if any(type(v) is not int or v < 0 for v in values):
+                continue
+            if values[1] > values[0]:
+                continue
+            for key, value in zip(keys, values):
+                totals[key] += value
+            turns += 1
+        elif event.get("type") == "item.completed":
+            item = event.get("item")
+            if isinstance(item, dict) and item.get("type") == "agent_message":
+                message = item.get("text")
+                if isinstance(message, str):
+                    final_message = message[-MAX_OUTPUT:]
+    return {"token_usage": totals if turns else None,
+            "turns_completed": turns, "invalid_lines": invalid,
+            "final_message": final_message,
+            "note": "Cached input is included in input_tokens, not additional."}
+
 
 
 def prepare(project: Path, task: str, *, module: str | None = None, intent: str | None = None) -> dict:
@@ -45,13 +88,18 @@ def run(project: Path, task: str, *, approve: bool = False, timeout: int = 3600,
     if not codex:
         return {'status': 'blocked', 'reason': 'codex executable not available'}
     root = project.resolve()
-    argv = [codex, 'exec', plan['prompt']]
+    argv = [codex, 'exec', '--json', plan['prompt']]
+    started = time.monotonic()
     try:
         p = subprocess.run(argv, cwd=root, capture_output=True, text=True,
                            timeout=timeout, check=False, shell=False)
+        parsed = parse_codex_jsonl(p.stdout)
         result = {'status': 'completed' if p.returncode == 0 else 'failed',
                   'exit_code': p.returncode, 'task': task, 'route': plan['route'],
-                  'stdout_tail': p.stdout[-MAX_OUTPUT:], 'stderr_tail': p.stderr[-MAX_OUTPUT:],
+                  'token_usage': parsed['token_usage'], 'turns_completed': parsed['turns_completed'],
+                  'invalid_jsonl_lines': parsed['invalid_lines'],
+                  'final_message': parsed['final_message'], 'stderr_tail': p.stderr[-MAX_OUTPUT:],
+                  'duration_seconds': round(time.monotonic() - started, 3),
                   'note': 'CLI completion is NOT proof of quality gate success', 'at': now()}
     except subprocess.TimeoutExpired:
         result = {'status': 'failed', 'reason': 'timeout', 'timeout_seconds': timeout}
@@ -61,4 +109,15 @@ def run(project: Path, task: str, *, approve: bool = False, timeout: int = 3600,
     base.mkdir(parents=True, exist_ok=True)
     result['run_id'] = uuid.uuid4().hex[:12]
     json_write(base / (result['run_id'] + '.json'), result)
+    if 'duration_seconds' in result:
+        usage = result.get('token_usage') or {}
+        record_metrics(
+            root, result['run_id'],
+            input_tokens=usage.get('input_tokens'),
+            output_tokens=usage.get('output_tokens'),
+            cached_tokens=usage.get('cached_input_tokens'),
+            duration_seconds=result['duration_seconds'],
+            outcome='failed' if result['status'] == 'failed' else 'unknown',
+        )
+        result['metrics_saved'] = result['run_id']
     return result
