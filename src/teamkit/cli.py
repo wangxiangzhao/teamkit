@@ -36,6 +36,8 @@ def install(home: Path, *, dry_run: bool = False, repair_legacy: bool = False) -
     import os
     source = ASSETS / "agents"
     home = home.expanduser().resolve()
+    if not home.exists() and not dry_run:
+        home.mkdir(parents=True)
     installed, skipped, repaired, warnings = [], [], [], []
 
     def safe_parent(parts):
@@ -79,7 +81,7 @@ def install(home: Path, *, dry_run: bool = False, repair_legacy: bool = False) -
         dest = home / ".codex" / "agents" / item.name
         if repair_legacy and dest.is_file() and not dest.is_symlink():
             bundled = item.read_bytes()
-            prev = bundled.split(b"\\n", 1)[1] if bundled.startswith(b'name = "') else None
+            prev = bundled[len(bundled.splitlines(keepends=True)[0]):] if bundled.startswith(b'name = "') else None
             if prev is not None and dest.read_bytes() == prev:
                 backup_dir = safe_parent([".codex", "teamkit-backups", "agents"])
                 backup = home / ".codex" / "teamkit-backups" / "agents" / item.name
