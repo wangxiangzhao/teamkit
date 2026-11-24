@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 import os
 import re
 from datetime import datetime, timezone
@@ -56,9 +57,14 @@ def now() -> str:
 
 def json_write(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    descriptor, filename = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+        os.replace(filename, path)
+    finally:
+        Path(filename).unlink(missing_ok=True)
 
 
 def json_read(path: Path, default: Any = None) -> Any:

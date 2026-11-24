@@ -63,6 +63,17 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/teamkit-derived" \
             CODE_SIGNING_ALLOWED=NO build
+      - name: Xcode workspace, simulator UI test and screenshot evidence
+        run: |
+          brew install xcodegen
+          xcodegen --version
+          bash tests/fixtures/IOSWorkspace/verify.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: teamkit-ios-workspace-evidence
+          path: ${{ runner.temp }}/teamkit-workspace-evidence
+          if-no-files-found: ignore
       - name: Snapshot test evidence and report honest scope
         if: always()
         run: |

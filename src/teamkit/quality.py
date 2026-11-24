@@ -2,7 +2,9 @@
 from __future__ import annotations
 import hashlib
 import os
+import signal
 import subprocess
+import tempfile
 from pathlib import Path
 from .core import json_read, json_write, now
 
@@ -46,6 +48,9 @@ def run_gate(project: Path, gate: str, *, timeout: int = 180, approve_command: b
     if timeout < 1 or timeout > 1800:
         raise ValueError('Invalid timeout')
     base = project.resolve() / '.teamkit'
+    reports = base / 'reports'
+    if any(path.is_symlink() for path in (base, base / 'gates.json', reports)):
+        raise ValueError('Unsafe gate metadata path')
     cfg = json_read(base / 'gates.json')
     if cfg is None:
         raise FileNotFoundError('Project not initialized')
@@ -57,12 +62,28 @@ def run_gate(project: Path, gate: str, *, timeout: int = 180, approve_command: b
         return {'gate': gate, 'status': 'blocked', 'reason': 'Explicit --approve-command required'}
     if not isinstance(cmd, list) or not cmd or any(not isinstance(x, str) or not x or '\x00' in x for x in cmd):
         raise ValueError('Gate command must be a nonempty argv string array')
+    root = project.resolve()
     try:
-        p = subprocess.run(cmd, cwd=project.resolve(), capture_output=True, text=True,
-                           timeout=timeout, check=False, shell=False)
-        data = {'gate': gate, 'status': 'passed' if p.returncode == 0 else 'failed',
-                'exit_code': p.returncode, 'argv': cmd, 'stdout_tail': p.stdout[-6000:],
-                'stderr_tail': p.stderr[-6000:], 'at': now()}
+        with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+            with subprocess.Popen(cmd, cwd=root, stdout=stdout, stderr=stderr,
+                                  start_new_session=True) as process:
+                try:
+                    exit_code = process.wait(timeout=timeout)
+                except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
+                    raise
+            tails = []
+            for stream in (stdout, stderr):
+                size = stream.seek(0, os.SEEK_END)
+                stream.seek(max(0, size - 6000))
+                tails.append(stream.read(6000).decode('utf-8', errors='replace'))
+        data = {'gate': gate, 'status': 'passed' if exit_code == 0 else 'failed',
+                'exit_code': exit_code, 'argv': cmd, 'stdout_tail': tails[0],
+                'stderr_tail': tails[1], 'at': now()}
     except subprocess.TimeoutExpired:
         data = {'gate': gate, 'status': 'failed', 'reason': 'timeout', 'timeout_seconds': timeout}
     except OSError as exc:
