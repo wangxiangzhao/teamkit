@@ -1,0 +1,71 @@
+name: macOS Integration
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  native-tools:
+    name: Xcode and Codex CLI bridge
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install TeamKit and local test dependencies
+        run: python3 -m pip install -e . pytest tomli pillow
+      - name: Real Xcode and simulator inventory
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available
+      - name: Check supported Codex CLI interface without login
+        run: |
+          npm install --global @openai/codex
+          codex --version
+          codex exec --help
+          teamkit verify-native
+      - name: One-command onboarding of a real Swift package
+        run: |
+          cd tests/fixtures/SwiftSmoke
+          teamkit onboard
+          teamkit check
+          teamkit capabilities
+      - name: Execute real iOS Simulator SDK build through TeamKit gate
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          from teamkit.core import json_read, json_write
+          base = pathlib.Path("tests/fixtures/SwiftSmoke/.teamkit")
+          cfg = json_read(base / "gates.json")
+          cfg["build_command"] = ["xcodebuild", "-scheme", "TeamKitSmoke",
+              "-destination", "generic/platform=iOS Simulator",
+              "-derivedDataPath", "/tmp/teamkit-macos-ci-derived",
+              "CODE_SIGNING_ALLOWED=NO", "build"]
+          cfg["test_command"] = ["swift", "test"]
+          json_write(base / "gates.json", cfg)
+          PY
+          teamkit gate build --project tests/fixtures/SwiftSmoke --approve-command --timeout 900
+          teamkit gate test --project tests/fixtures/SwiftSmoke --approve-command --timeout 900
+      - name: Snapshot test evidence and report honest scope
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          base = Path("tests/fixtures/SwiftSmoke/.teamkit/reports")
+          for item in ["build.json", "test.json"]:
+              file = base / item
+              if file.exists():
+                  report = json.loads(file.read_text())
+                  print(item, report.get("status"), report.get("exit_code"))
+          print("Codex authenticated native subagents: NOT RUN (no user credentials)")
+          print("Figma MCP live design: NOT RUN (no design access)")
+          print("Real user iOS app: NOT RUN (synthetic package only)")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: teamkit-macos-gate-evidence
+          path: tests/fixtures/SwiftSmoke/.teamkit/reports/*.json
+          if-no-files-found: ignore

@@ -20,6 +20,7 @@ from .visual import compare_images, optimize_image
 from .onboarding import onboard, detach
 from .audit import audit_project, safe_maintain
 from .live import attach, capability_report
+from .native import probe_native
 from .skill_resolver import resolve as resolve_project_skills
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -259,6 +260,8 @@ def build_parser() -> argparse.ArgumentParser:
     caps.add_argument("--home", type=Path)
     resolve = subs.add_parser("resolve-skills", help="Report available vs missing professional Skills")
     resolve.add_argument("--project", type=Path, default=Path.cwd())
+    native = subs.add_parser("verify-native", help="Probe Codex/Xcode/Swift CLI availability without changing anything")
+    native.add_argument("--skip-simulator", action="store_true")
     return p
 
 
@@ -362,6 +365,8 @@ def main(argv: list[str] | None = None) -> int:
             result = capability_report(args.project, home=args.home)
         elif args.command == "resolve-skills":
             result = resolve_project_skills(args.project)
+        elif args.command == "verify-native":
+            result = probe_native(skip_simulator=args.skip_simulator)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")

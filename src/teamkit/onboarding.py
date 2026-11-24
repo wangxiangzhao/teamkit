@@ -13,6 +13,7 @@ from pathlib import Path
 from .activation import activate, deactivate, START, END
 from .core import init_project, json_read, json_write, project_status, sync_project
 from .audit import safe_maintain
+from .native import probe_native
 
 
 def _discover_shared_schemes(project: Path) -> dict:
@@ -141,7 +142,8 @@ def onboard(project: Path, *, dry_run: bool = False) -> dict:
             "xcode_scheme": schemes["candidates"][0] if not schemes["ambiguous"] else None,
             "xcode_scheme_requires_review": schemes["ambiguous"],
             "how_to_use": "Run codex in this project; TeamKit rules are available in AGENTS.md",
-            "limitations": "No build, native subagent, Figma or StoreKit execution verified during onboarding",
+            "native_environment": probe_native(skip_simulator=False),
+            "limitations": "No build, authenticated native subagent, Figma or StoreKit execution verified during onboarding",
         }
     except Exception:
         # If this command created metadata but failed before activation, don't leave a
