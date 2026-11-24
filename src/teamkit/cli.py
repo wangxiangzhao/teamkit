@@ -24,6 +24,7 @@ from .native import probe_native
 from .figma_contract import contract as figma_contract
 from .skill_audit import audit_skills
 from .privacy_audit import inspect_privacy
+from .event_audit import inventory_events
 from .skill_resolver import resolve as resolve_project_skills
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, json_write, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -285,6 +286,8 @@ def build_parser() -> argparse.ArgumentParser:
     skillaudit.add_argument("--project", type=Path, default=Path.cwd())
     privacy = subs.add_parser("privacy", help="Non-destructive iOS Info.plist and privacy-manifest preflight")
     privacy.add_argument("--project", type=Path, default=Path.cwd())
+    events = subs.add_parser("events", help="Read-only analytics event call-site inventory")
+    events.add_argument("--project", type=Path, default=Path.cwd())
     return p
 
 
@@ -397,6 +400,8 @@ def main(argv: list[str] | None = None) -> int:
             result = audit_skills(args.project)
         elif args.command == "privacy":
             result = inspect_privacy(args.project)
+        elif args.command == "events":
+            result = inventory_events(args.project)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
