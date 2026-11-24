@@ -15,6 +15,7 @@ from .core import init_project, json_read, json_write, project_status, sync_proj
 from .audit import safe_maintain
 from .native import probe_native
 from .project_inspect import inspect_project
+from .privacy_audit import inspect_privacy
 
 
 def _discover_shared_schemes(project: Path) -> dict:
@@ -146,10 +147,12 @@ def onboard(project: Path, *, dry_run: bool = False) -> dict:
         sync_project(root)
         maintenance = safe_maintain(root)
         project_insights = inspect_project(root)
+        privacy_preflight = inspect_privacy(root)
         return {
             "status": "ready",
             "self_audit": maintenance,
             "project_insights": project_insights,
+            "privacy_preflight": privacy_preflight,
             "project": str(root),
             "initialized": initialized_here,
             "activation": activated["status"],

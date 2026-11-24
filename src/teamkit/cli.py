@@ -23,6 +23,7 @@ from .live import attach, capability_report
 from .native import probe_native
 from .figma_contract import contract as figma_contract
 from .skill_audit import audit_skills
+from .privacy_audit import inspect_privacy
 from .skill_resolver import resolve as resolve_project_skills
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, json_write, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -282,6 +283,8 @@ def build_parser() -> argparse.ArgumentParser:
     figma.add_argument("--write", action="store_true")
     skillaudit = subs.add_parser("audit-skills", help="Inspect installed Skill metadata, references and provenance")
     skillaudit.add_argument("--project", type=Path, default=Path.cwd())
+    privacy = subs.add_parser("privacy", help="Non-destructive iOS Info.plist and privacy-manifest preflight")
+    privacy.add_argument("--project", type=Path, default=Path.cwd())
     return p
 
 
@@ -392,6 +395,8 @@ def main(argv: list[str] | None = None) -> int:
             result = figma_contract(args.json_file, module=args.module, project=args.project, write=args.write)
         elif args.command == "audit-skills":
             result = audit_skills(args.project)
+        elif args.command == "privacy":
+            result = inspect_privacy(args.project)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
