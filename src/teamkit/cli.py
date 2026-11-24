@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .skill_sources import candidates
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
 
@@ -82,6 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     ctx = subs.add_parser("context", help="Return candidate files for a project module")
     ctx.add_argument("module")
     ctx.add_argument("--project", type=Path, default=Path.cwd())
+    cand = subs.add_parser("candidates", help="Discover reviewed source candidates without installing anything")
+    cand.add_argument("--capability", help="Filter by capability (e.g. swiftui, testing)")
     return p
 
 
@@ -112,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
             result = list_project_skills(args.project)
         elif args.command == "context":
             result = context_index(args.project, args.module)
+        elif args.command == "candidates":
+            result = candidates(args.capability)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
