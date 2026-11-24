@@ -85,3 +85,18 @@ def test_cli_return_codes(tmp_path, capsys):
 def test_resume_rejects_path_traversal(tmp_path):
     init_project(tmp_path)
     assert main(["resume", "../escape", "--project", str(tmp_path)]) == 2
+
+
+def test_project_skill_extension_and_context(tmp_path):
+    (tmp_path / "Reader.swift").write_text("struct Reader {}")
+    init_project(tmp_path)
+    assert main(["extend", "ios_engineer", "reader-workflow", "--project", str(tmp_path)]) == 0
+    path = tmp_path / ".agents/skills/reader-workflow/SKILL.md"
+    assert path.exists()
+    path.write_text("custom content")
+    assert main(["extend", "ios_engineer", "reader-workflow", "--project", str(tmp_path)]) == 0
+    assert path.read_text() == "custom content"
+    assert main(["skills", "--project", str(tmp_path)]) == 0
+    assert main(["context", "Reader", "--project", str(tmp_path)]) == 0
+    assert main(["extend", "unknown_agent", "invalid", "--project", str(tmp_path)]) == 2
+    assert main(["extend", "ios_engineer", "../bad", "--project", str(tmp_path)]) == 2

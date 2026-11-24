@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .core import (ROUTES, check_project, checkpoint, init_project, json_read,
+from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
 
 ASSETS = Path(__file__).resolve().parent / "assets"
@@ -73,6 +73,15 @@ def build_parser() -> argparse.ArgumentParser:
     resume = subs.add_parser("resume", help="Read a task checkpoint; does not resume Codex processes")
     resume.add_argument("task_id")
     resume.add_argument("--project", type=Path, default=Path.cwd())
+    ext = subs.add_parser("extend", help="Safely add project-scoped Skill to an Agent")
+    ext.add_argument("agent")
+    ext.add_argument("skill")
+    ext.add_argument("--project", type=Path, default=Path.cwd())
+    sk = subs.add_parser("skills", help="List bundled and project Skills")
+    sk.add_argument("--project", type=Path, default=Path.cwd())
+    ctx = subs.add_parser("context", help="Return candidate files for a project module")
+    ctx.add_argument("module")
+    ctx.add_argument("--project", type=Path, default=Path.cwd())
     return p
 
 
@@ -97,6 +106,12 @@ def main(argv: list[str] | None = None) -> int:
             result = task_plan(route_task(args.description, explicit_intent=args.intent))
         elif args.command == "checkpoint":
             result = checkpoint(args.project, args.task_id, args.state, args.note)
+        elif args.command == "extend":
+            result = extend_project(args.project, args.agent, args.skill)
+        elif args.command == "skills":
+            result = list_project_skills(args.project)
+        elif args.command == "context":
+            result = context_index(args.project, args.module)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")

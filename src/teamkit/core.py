@@ -227,3 +227,58 @@ def project_status(root: Path) -> dict[str, Any]:
         return {"initialized": False, "path": str(root.resolve())}
     tasks = sorted(p.stem for p in (workspace / "tasks").glob("*.json")) if (workspace / "tasks").exists() else []
     return {"initialized": True, "name": profile["name"], "detected": profile["detected"], "tasks": tasks, "gates": json_read(workspace / "gates.json", {})}
+
+
+def extend_project(root: Path, agent: str, name: str) -> dict[str, Any]:
+    """Add a scoped project Skill without replacing existing user content."""
+    if agent not in ROLES:
+        raise ValueError(f"Unknown agent: {agent}")
+    if not re.fullmatch(r"[a-z][a-z0-9-]{1,63}", name):
+        raise ValueError("Skill name must be lowercase kebab-case")
+    root = root.resolve()
+    workspace = root / ".teamkit"
+    if not (workspace / "project.json").exists():
+        raise FileNotFoundError("Project is not initialized")
+    skill_dir = root / ".agents" / "skills" / name
+    skill_file = skill_dir / "SKILL.md"
+    created = not skill_file.exists()
+    if created:
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_file.write_text(
+            f"---\nname: {name}\ndescription: Project-specific {name} workflow for {agent}.\n---\n"
+            f"# {name}\n\n## Scope\nDocument verified project-specific behaviors and paths.\n"
+            "\n## Workflow\n1. Inspect the affected module and constraints.\n"
+            "2. Follow project business invariants.\n3. Report evidence and unverified work.\n"
+            "\n## Acceptance\nDefine real tests before marking this skill mature.\n",
+            encoding="utf-8",
+        )
+    manifest = workspace / "extensions.json"
+    data = json_read(manifest, {"agents": {}, "skills": []})
+    active = data.setdefault("agents", {}).setdefault(agent, [])
+    if name not in active:
+        active.append(name)
+        active.sort()
+    skills = data.setdefault("skills", [])
+    if name not in skills:
+        skills.append(name)
+        skills.sort()
+    json_write(manifest, data)
+    return {"agent": agent, "skill": name, "created": created, "path": str(skill_file), "status": "registered"}
+
+
+def list_project_skills(root: Path) -> dict[str, Any]:
+    project_skills = root.resolve() / ".agents" / "skills"
+    found = sorted(p.parent.name for p in project_skills.glob("*/SKILL.md"))
+    bundled = sorted(p.parent.name for p in (Path(__file__).resolve().parent / "assets" / "skills").glob("*/SKILL.md"))
+    return {"bundled": bundled, "project": found, "extensions": json_read(root.resolve() / ".teamkit" / "extensions.json", {})}
+
+
+def context_index(root: Path, module: str) -> dict[str, Any]:
+    """Produce a narrow file index; don't inject arbitrary project source into prompts."""
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", module):
+        raise ValueError("Invalid module identifier")
+    index = json_read(root.resolve() / ".teamkit" / "index.json")
+    if index is None:
+        raise FileNotFoundError("Project index unavailable; run teamkit init")
+    candidates = sorted(p for p in index["files"] if module.lower() in p.lower())
+    return {"module": module, "matching_paths": candidates[:200], "truncated": len(candidates) > 200, "note": "Advisory file discovery only; inspect dependencies and invariants before code changes"}
