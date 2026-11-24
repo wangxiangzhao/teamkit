@@ -18,6 +18,7 @@ from .skill_sources import candidates
 from .activation import activate, deactivate
 from .visual import compare_images, optimize_image
 from .onboarding import onboard, detach
+from .audit import audit_project, safe_maintain
 from .skill_sources import candidates
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -176,6 +177,10 @@ def build_parser() -> argparse.ArgumentParser:
     detached = subs.add_parser("detach", help="Remove only TeamKit's AGENTS instructions")
     detached.add_argument("--project", type=Path, default=Path.cwd())
     detached.add_argument("--dry-run", action="store_true")
+    aud = subs.add_parser("audit", help="Read-only self-check of project integration")
+    aud.add_argument("--project", type=Path, default=Path.cwd())
+    maintain = subs.add_parser("maintain", help="Safe automatic upkeep of owned project metadata")
+    maintain.add_argument("--project", type=Path, default=Path.cwd())
     return p
 
 
@@ -255,6 +260,10 @@ def main(argv: list[str] | None = None) -> int:
             result = onboard(args.project, dry_run=args.dry_run)
         elif args.command == "detach":
             result = detach(args.project, dry_run=args.dry_run)
+        elif args.command == "audit":
+            result = audit_project(args.project)
+        elif args.command == "maintain":
+            result = safe_maintain(args.project)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
