@@ -99,3 +99,27 @@ teamkit optimize-image oversized.png candidate.png --approve
 ```
 
 Pixel difference analysis and image optimization are real deterministic tools, but do not replace Figma semantics, motion or interaction testing. Optimization never overwrites the original. Pillow is an optional runtime dependency.
+
+## Upgrading a previous TeamKit 0.1 installation
+
+Version 0.1 installed role TOMLs without the required Codex `name` key. The default install remains non-destructive; to repair **only exact, unmodified** old TeamKit role files, use:
+
+```bash
+teamkit install --dry-run --repair-legacy-roles
+teamkit install --repair-legacy-roles
+```
+
+The repair backs up each matching original under `~/.codex/teamkit-backups/agents/`, skips customized files and never edits `config.toml` or login credentials. For any role still skipped, review it manually before replacing.
+
+## Recommended everyday workflow
+
+```bash
+cd /path/to/your/ios-project
+teamkit init                     # first use only
+teamkit activate --approve       # explicitly enable Master instructions
+codex                             # work normally
+teamkit check                     # basic deterministic inventory check
+teamkit gate build --approve-command  # only after configuring build_command
+```
+
+For the full Mac-native workflow you must configure actual schemes, simulator destination and external MCP connections; `teamkit release` remains blocked until independent evidence is available.
