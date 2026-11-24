@@ -24,14 +24,14 @@ ROLES = {
 }
 
 ROUTES = {
-    "ui_module": {"primary": "ios_engineer", "helpers": ["design", "quality"], "skills": ["figma-design-to-code", "ui-quality"], "risk": "T3"},
-    "ios_code": {"primary": "ios_engineer", "helpers": ["quality"], "skills": ["ios-development"], "risk": "T2"},
-    "test": {"primary": "quality", "helpers": [], "skills": ["ui-quality"], "risk": "T2"},
-    "security_review": {"primary": "compliance", "helpers": ["quality"], "skills": ["release-privacy"], "risk": "T4"},
-    "data_analysis": {"primary": "analytics", "helpers": ["growth"], "skills": ["event-analytics"], "risk": "T2"},
-    "monetization": {"primary": "growth", "helpers": ["analytics"], "skills": ["monetization-roas"], "risk": "T3"},
-    "backend": {"primary": "backend_engineer", "helpers": ["quality"], "skills": ["backend-data"], "risk": "T2"},
-    "product": {"primary": "product", "helpers": [], "skills": ["product-research"], "risk": "T1"},
+    "ui_module": {"primary": "ios_engineer", "helpers": ["design", "quality"], "skills": ["figma-contract", "ios-delivery", "quality-gates"], "risk": "T3"},
+    "ios_code": {"primary": "ios_engineer", "helpers": ["quality"], "skills": ["ios-delivery"], "risk": "T2"},
+    "test": {"primary": "quality", "helpers": [], "skills": ["quality-gates"], "risk": "T2"},
+    "security_review": {"primary": "compliance", "helpers": ["quality"], "skills": ["quality-gates"], "risk": "T4"},
+    "data_analysis": {"primary": "analytics", "helpers": ["growth"], "skills": ["analytics-roas"], "risk": "T2"},
+    "monetization": {"primary": "growth", "helpers": ["analytics"], "skills": ["analytics-roas"], "risk": "T3"},
+    "backend": {"primary": "backend_engineer", "helpers": ["quality"], "skills": ["project-adaptation"], "risk": "T2"},
+    "product": {"primary": "product", "helpers": [], "skills": ["project-adaptation"], "risk": "T1"},
 }
 
 KEYWORDS = {

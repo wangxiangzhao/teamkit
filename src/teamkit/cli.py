@@ -20,6 +20,7 @@ from .visual import compare_images, optimize_image
 from .onboarding import onboard, detach
 from .audit import audit_project, safe_maintain
 from .live import attach, capability_report
+from .skill_resolver import resolve as resolve_project_skills
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
 
@@ -188,6 +189,8 @@ def build_parser() -> argparse.ArgumentParser:
     caps = subs.add_parser("capabilities", help="Audit installed Agent and Skill files, without claiming runtime activation")
     caps.add_argument("--project", type=Path, default=Path.cwd())
     caps.add_argument("--home", type=Path)
+    resolve = subs.add_parser("resolve-skills", help="Report available vs missing professional Skills")
+    resolve.add_argument("--project", type=Path, default=Path.cwd())
     return p
 
 
@@ -272,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
                 result["global_install"] = install(Path.home(), dry_run=args.dry_run, repair_legacy=True)
                 if not args.dry_run:
                     result["capabilities"] = capability_report(args.project)
+                    result["agent_skill_map"] = resolve_project_skills(args.project, persist=True)
                     result["existing_codex_session"] = {
                         "restart_required": False,
                         "new_agent_hot_registration_verified": False,
@@ -288,6 +292,8 @@ def main(argv: list[str] | None = None) -> int:
             result = attach(args.project, session=args.session, approve_queue=args.approve_queue)
         elif args.command == "capabilities":
             result = capability_report(args.project, home=args.home)
+        elif args.command == "resolve-skills":
+            result = resolve_project_skills(args.project)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
