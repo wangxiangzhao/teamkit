@@ -20,7 +20,6 @@ from .visual import compare_images, optimize_image
 from .onboarding import onboard, detach
 from .audit import audit_project, safe_maintain
 from .live import attach, capability_report
-from .skill_sources import candidates
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
 
@@ -266,6 +265,19 @@ def main(argv: list[str] | None = None) -> int:
             result = optimize_image(args.source, args.output, quality=args.quality, approve=args.approve)
         elif args.command == "onboard":
             result = onboard(args.project, dry_run=args.dry_run)
+            # Single entrypoint: auto-install missing *bundled* capabilities without
+            # touching existing Codex settings, credentials or customized Skills.
+            # This is performed only after successful project preflight/adaptation.
+            if result["status"] in {"ready", "dry-run"}:
+                result["global_install"] = install(Path.home(), dry_run=args.dry_run, repair_legacy=True)
+                if not args.dry_run:
+                    result["capabilities"] = capability_report(args.project)
+                    result["existing_codex_session"] = {
+                        "restart_required": False,
+                        "new_agent_hot_registration_verified": False,
+                        "instruction": attach(args.project)["prompt"],
+                        "note": "When invoked by an active Codex session, process this instruction in that session; external shells cannot inject into an existing interactive session.",
+                    }
         elif args.command == "detach":
             result = detach(args.project, dry_run=args.dry_run)
         elif args.command == "audit":
