@@ -13,7 +13,7 @@ from teamkit.skill_sources import candidates
 @pytest.fixture
 def project(tmp_path):
     (tmp_path / "Sources" / "Reader").mkdir(parents=True)
-    (tmp_path / "Sources" / "Reader" / "ReaderView.swift").write_text("import SwiftUI\\nstruct ReaderView {}")
+    (tmp_path / "Sources" / "Reader" / "ReaderView.swift").write_text("import SwiftUI\nstruct ReaderView {}")
     init_project(tmp_path)
     return tmp_path
 
@@ -95,7 +95,7 @@ def test_metrics_roas(project,tmp_path):
     with pytest.raises(ValueError):
         record(project, 'BAD', input_tokens=3, cached_tokens=4)
     csv_file=tmp_path/'data.csv'
-    csv_file.write_text('cohort,spend,revenue,days_observed,currency\\nA,100,120,30,USD\\nB,50,75,15,USD\\n')
+    csv_file.write_text('cohort,spend,revenue,days_observed,currency\nA,100,120,30,USD\nB,50,75,15,USD\n')
     res=roas_csv(csv_file)
     assert res['aggregate_roas'] == '1.200000'
     assert res['complete_cohorts'] == 1

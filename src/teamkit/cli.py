@@ -89,8 +89,6 @@ def build_parser() -> argparse.ArgumentParser:
     ctx = subs.add_parser("context", help="Return candidate files for a project module")
     ctx.add_argument("module")
     ctx.add_argument("--project", type=Path, default=Path.cwd())
-    cand = subs.add_parser("candidates", help="Discover reviewed source candidates without installing anything")
-    cand.add_argument("--capability", help="Filter by capability (e.g. swiftui, testing)")
     cand = subs.add_parser("candidates", help="Read-only mature Skill candidates")
     cand.add_argument("--capability")
     mods = subs.add_parser("modules", help="Discover path-derived modules")
@@ -169,8 +167,6 @@ def main(argv: list[str] | None = None) -> int:
             result = list_project_skills(args.project)
         elif args.command == "context":
             result = context_index(args.project, args.module)
-        elif args.command == "candidates":
-            result = candidates(args.capability)
         elif args.command == "candidates":
             result = candidates(args.capability)
         elif args.command == "modules":

@@ -48,6 +48,20 @@
         "performance"
       ],
       "status": "discovery-only"
+    },
+    {
+      "id": "ios-skills-community",
+      "repository": "https://github.com/thienqo/ios-skills",
+      "kind": "collection",
+      "capabilities": [
+        "swiftui",
+        "ios",
+        "uikit",
+        "testing",
+        "security",
+        "performance"
+      ],
+      "status": "candidate-license-review-required"
     }
   ]
 }
