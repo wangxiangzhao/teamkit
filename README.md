@@ -16,6 +16,9 @@ teamkit install
 cd /path/to/your/project
 teamkit init
 teamkit status
+teamkit skills
+teamkit extend ios_engineer reader-workflow
+teamkit context Reader
 teamkit route '根据 Figma 开发完整 iOS 页面'
 teamkit plan '根据 Figma 开发完整 iOS 页面'
 teamkit check
@@ -24,13 +27,15 @@ teamkit resume TASK-001
 teamkit sync
 ```
 
-`teamkit install` creates **only missing** `~/.codex/agents/*.toml` files. It does not alter existing `config.toml`, `AGENTS.md`, authentication or MCP credentials. The bundled role definitions are examples; verify syntax and compatibility with your installed Codex version. Local `teamkit` commands **do not spawn agents**: task routing produces advisory JSON for Codex Master. This avoids claiming autonomous dispatch where runtime integration has not been verified.
+`teamkit install` creates **only missing** `~/.codex/agents/*.toml` and `~/.agents/skills/*/SKILL.md` files. It does not alter existing `config.toml`, `AGENTS.md`, authentication or MCP credentials. The bundled role definitions are examples; verify syntax and compatibility with your installed Codex version. Local `teamkit` commands **do not spawn agents**: task routing produces advisory JSON for Codex Master. This avoids claiming autonomous dispatch where runtime integration has not been verified.
 
 `teamkit init` creates `.teamkit/` metadata in the selected project and does not modify product code. `teamkit check` currently validates indexed source fingerprints and records an inventory report. It is **not** an Xcode build, unit testing, privacy audit, Figma comparison or App Store signoff. These are future integrations.
 
 ## Architecture
 
 - Eight bounded roles: product, design, ios_engineer, backend_engineer, quality, compliance, growth, analytics.
+- Six reusable foundation Skills; project skills are created on demand with `teamkit extend` and never overwrite existing content.
+- `teamkit context <module>` returns narrow candidate file paths, not a complete semantic dependency analysis.
 - Deterministic routing with ambiguity warnings, conservative dependency plans, no automatic LLM calls.
 - Project inventory and SHA-256 delta detection; skips .git, Pods, DerivedData, node_modules, .teamkit.
 - Project JSON metadata and task checkpoints for human/Codex recovery.
