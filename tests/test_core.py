@@ -100,3 +100,12 @@ def test_project_skill_extension_and_context(tmp_path):
     assert main(["context", "Reader", "--project", str(tmp_path)]) == 0
     assert main(["extend", "unknown_agent", "invalid", "--project", str(tmp_path)]) == 2
     assert main(["extend", "ios_engineer", "../bad", "--project", str(tmp_path)]) == 2
+
+
+def test_check_detects_unindexed_new_files(tmp_path):
+    init_project(tmp_path)
+    (tmp_path / "New.swift").write_text("let new = true")
+    result = check_project(tmp_path)
+    assert result["status"] == "failed"
+    assert any(e["reason"] == "new_since_index" for e in result["errors"])
+    assert result["checks"]["references"] == "not-run"

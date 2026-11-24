@@ -209,13 +209,16 @@ def check_project(root: Path) -> dict[str, Any]:
     profile = json_read(workspace / "project.json")
     scan = json_read(workspace / "index.json", {"files": {}})
     errors = []
+    actual_index = inventory(root)["files"]
+    for extra in sorted(set(actual_index) - set(scan["files"])):
+        errors.append({"path": extra, "reason": "new_since_index"})
     for relative, expected in scan["files"].items():
         path = _safe_relative(root, relative)
         if not path.is_file() or path.is_symlink():
             errors.append({"path": relative, "reason": "missing_or_invalid"})
         elif _fingerprint(path) != expected["sha256"]:
             errors.append({"path": relative, "reason": "changed_since_index"})
-    result = {"status": "failed" if errors else "passed", "checks": {"inventory": "failed" if errors else "passed", "references": "passed"}, "errors": errors[:100], "important": "Build/test/UI/security are NOT run by the core checker; add explicit verified gates before claiming release readiness", "project": profile["name"]}
+    result = {"status": "failed" if errors else "passed", "checks": {"inventory": "failed" if errors else "passed", "references": "not-run"}, "errors": errors[:100], "important": "Build/test/UI/security are NOT run by the core checker; add explicit verified gates before claiming release readiness", "project": profile["name"]}
     json_write(workspace / "reports" / "latest-check.json", result)
     return result
 
