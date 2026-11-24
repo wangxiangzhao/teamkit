@@ -9,6 +9,7 @@ from pathlib import Path
 from .core import json_write, route_task, now
 from .context_engine import compile_context
 from .metrics import record as record_metrics
+from .skill_resolver import resolve_task
 
 MAX_OUTPUT = 12000
 
@@ -69,7 +70,7 @@ def prepare(project: Path, task: str, *, module: str | None = None, intent: str 
         'Do not change credentials, publish apps or mutate production systems. '
         'Keep handoffs concise and log significant results.\n\n'
     )
-    payload = {'task': task, 'route': route, 'project': str(root), 'module_context': context}
+    payload = {'task': task, 'route': route, 'project': str(root), 'module_context': context, 'task_skills': resolve_task(root, route)}
     prompt = instructions + json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
     return {'status': 'prepared', 'route': route, 'module_context': context,
             'prompt': prompt, 'estimated_prompt_chars': len(prompt)}

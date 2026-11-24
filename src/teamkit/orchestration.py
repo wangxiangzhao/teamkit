@@ -1,6 +1,10 @@
 """Persistent deterministic DAG scheduling. Codex Master owns real model dispatch."""
 from __future__ import annotations
 import re
+import hashlib
+import fcntl
+from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
 from typing import Any
 from .core import json_read, json_write, now, route_task
@@ -23,7 +27,10 @@ def _storage(project: Path, task_id: str) -> Path:
     base = project.resolve() / ".teamkit"
     if not (base / "project.json").exists():
         raise FileNotFoundError("Initialize project first")
-    return base / "plans" / f"{task_id}.json"
+    path = base / "plans" / f"{task_id}.json"
+    if path.parent.is_symlink() or path.is_symlink():
+        raise ValueError("Unsafe plan storage")
+    return path
 
 
 def _validate(nodes: list[dict]) -> None:
@@ -48,6 +55,58 @@ def _validate(nodes: list[dict]) -> None:
         visit(k)
 
 
+@contextmanager
+def _project_lock(project: Path):
+    base = project.resolve() / ".teamkit"
+    if base.is_symlink() or not (base / "project.json").is_file():
+        raise ValueError("Unsafe or uninitialized project metadata")
+    lock = base / "scheduler.lock"
+    import os
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "rb+") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def _serialized(fn):
+    @wraps(fn)
+    def wrapped(project, *args, **kwargs):
+        with _project_lock(project):
+            return fn(project, *args, **kwargs)
+    return wrapped
+
+
+def _running(project: Path, excluding_task: str, excluding_node: str = "") -> list:
+    base = project.resolve() / ".teamkit/plans"
+    if base.is_symlink():
+        raise ValueError("Unsafe plan directory")
+    out = []
+    for file in sorted(base.glob("*.json")):
+        if file.is_symlink():
+            raise ValueError("Unsafe plan file")
+        plan = json_read(file)
+        for node in plan["nodes"]:
+            if node["status"] == "running" and not (plan["task_id"] == excluding_task and node["id"] == excluding_node):
+                out.append(node)
+    return out
+
+
+def _evidence(project: Path, references: list[str]) -> list[dict]:
+    root = project.resolve()
+    result = []
+    for ref in references:
+        path = root / ref
+        if Path(ref).is_absolute() or ".." in Path(ref).parts or not path.resolve().is_relative_to(root) or path.is_symlink() or not path.is_file():
+            raise ValueError("Evidence must be an existing local project file: " + ref)
+        from .core import _fingerprint
+        result.append({"path": ref, "sha256": _fingerprint(path)})
+    return result
+
+
+@_serialized
 def create_plan(project: Path, task_id: str, description: str, *, intent: str | None = None) -> dict:
     path = _storage(project, task_id)
     if path.exists():
@@ -81,7 +140,8 @@ def _conflict(a: list[str], b: list[str]) -> bool:
     def overlap(x, y):
         x, y = x.strip("/"), y.strip("/")
         return x == y or x.startswith(y + "/") or y.startswith(x + "/")
-    return any(overlap(x, y) for x in a for y in b)
+    # Unknown write scope is exclusive, not permission to overlap.
+    return not a or not b or any(overlap(x, y) for x in a for y in b)
 
 
 def ready_nodes(project: Path, task_id: str, max_running: int = 2) -> dict:
@@ -90,11 +150,11 @@ def ready_nodes(project: Path, task_id: str, max_running: int = 2) -> dict:
     plan = get_plan(project, task_id)
     nodes = plan["nodes"]
     by_id = {n["id"]: n for n in nodes}
-    active = [n for n in nodes if n["status"] == "running"]
+    active = _running(project, task_id)
     capacity = max(0, max_running - len(active))
     ready = []
     for n in nodes:
-        if n["status"] not in {"pending", "ready"}:
+        if n["status"] not in {"pending", "ready"} and not (n["status"] == "failed" and n.get("retry_eligible")):
             continue
         if not all(by_id[k]["status"] == "completed" for k in n["depends_on"]):
             continue
@@ -106,6 +166,7 @@ def ready_nodes(project: Path, task_id: str, max_running: int = 2) -> dict:
     return {"task_id": task_id, "ready": [{"id": n["id"], "agent": n["agent"], "mode": n["mode"], "paths": n["paths"]} for n in ready], "running": len(active), "slots": capacity, "advisory": True}
 
 
+@_serialized
 def update_node(project: Path, task_id: str, node_id: str, status: str, *, paths: list[str] | None = None, evidence: list[str] | None = None, note: str = "") -> dict:
     if status not in STATES:
         raise ValueError("Unknown status")
@@ -123,9 +184,15 @@ def update_node(project: Path, task_id: str, node_id: str, status: str, *, paths
     if paths is not None:
         if any(not isinstance(p, str) or not p or p.startswith("/") or ".." in Path(p).parts for p in paths):
             raise ValueError("Unsafe path scope")
-        node["paths"] = sorted(set(paths))
+        root = project.resolve()
+        canonical = [(root / p).resolve() for p in paths]
+        if any(not p.is_relative_to(root) for p in canonical):
+            raise ValueError("Path scope escapes project")
+        node["paths"] = sorted(set(p.relative_to(root).as_posix() for p in canonical))
     if status == "running":
-        active = [n for n in plan["nodes"] if n["id"] != node_id and n["status"] == "running"]
+        active = _running(project, task_id, node_id)
+        if len(active) >= 4:
+            raise ValueError("Project concurrency limit reached")
         if any(_conflict(node["paths"], n.get("paths", [])) for n in active):
             raise ValueError("Conflicting file ownership with active task")
         node["attempts"] += 1
@@ -133,9 +200,14 @@ def update_node(project: Path, task_id: str, node_id: str, status: str, *, paths
             raise ValueError("Retry budget exceeded")
     if status == "completed" and not evidence:
         raise ValueError("Completion requires actual evidence references")
+    verified = _evidence(project, evidence) if evidence else []
     node.update(status=status, updated_at=now(), note=note)
-    if evidence:
-        node["evidence"].extend(evidence)
+    if verified:
+        node["evidence"].extend(verified)
+    if status == "failed" and node["attempts"] < 3:
+        node["retry_eligible"] = True
+    elif status == "failed":
+        node["retry_eligible"] = False
     json_write(path, plan)
     return {"task_id": task_id, "node": node_id, "status": status, "attempts": node["attempts"]}
 

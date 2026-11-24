@@ -7,7 +7,7 @@ prove capability maturity, tool access, license compliance or runtime activation
 from __future__ import annotations
 import re
 from pathlib import Path
-from .core import ROLES, json_write
+from .core import ROLES, json_write, json_read
 
 ROLE_SKILLS = {
     "product": ["project-adaptation"],
@@ -76,14 +76,21 @@ def resolve(project: Path, *, home: Path | None = None, persist: bool = False) -
                 continue
             available.setdefault(name,{"path":str(skill),"scope":scope,
                                         "verified":False,"provenance":"filesystem"})
+    extensions = json_read(root / ".teamkit/extensions.json", {})
+    registered = extensions.get("agents", {})
     agents={}
     for role in ROLES:
-        expected=ROLE_SKILLS[role]
+        extra = registered.get(role, [])
+        if not isinstance(extra, list) or any(not isinstance(x, str) or not NAME.fullmatch(x) for x in extra):
+            warnings.append(f"Invalid project skill mapping: {role}")
+            extra = []
+        expected=list(dict.fromkeys(ROLE_SKILLS[role] + extra))
         agents[role]={
             "available_skills":[{"name":k, **available[k]} for k in expected if k in available],
             "missing_skills":[k for k in expected if k not in available],
             "unverified_expertise":GAPS[role],
             "runtime_verified":False,
+            "project_extensions":extra,
         }
     report={"schema_version":1,"project":str(root),"skills_found":len(available),
             "agents":agents,"warnings":warnings,
@@ -94,3 +101,20 @@ def resolve(project: Path, *, home: Path | None = None, persist: bool = False) -
             raise FileNotFoundError("Run teamkit onboard first")
         json_write(base/"skill-map.json",report)
     return report
+
+
+def resolve_task(project: Path, route: dict, *, home: Path | None = None) -> dict:
+    """Resolve only route-required skills and registered role extensions."""
+    mapping = resolve(project, home=home)
+    roles = list(dict.fromkeys([route["primary_agent"], *route.get("optional_agents", [])]))
+    requested = set(route.get("skills", []))
+    selected = {}
+    for role in roles:
+        entry = mapping["agents"][role]
+        wanted = requested | set(entry["project_extensions"])
+        selected[role] = {
+            "skills": [item for item in entry["available_skills"] if item["name"] in wanted],
+            "missing": [name for name in entry["missing_skills"] if name in wanted],
+        }
+    return {"roles":selected,"runtime_verified":False,
+            "note":"Read only relevant skill instructions; existing project rules override them."}

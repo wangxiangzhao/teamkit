@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from .core import json_read, json_write, inventory, now
+from .core import json_read, json_write, inventory, now, _fingerprint
 
 
 def _project_files(project: Path) -> tuple[dict, Path]:
@@ -41,7 +41,7 @@ def compile_context(project: Path, module: str, *, max_files: int = 30, max_char
     if not re.fullmatch(r'[\w-]{1,64}', module, re.UNICODE):
         raise ValueError('Invalid module')
     files, base = _project_files(project)
-    modules = json_read(base / 'modules.json') or discover_modules(project)
+    modules = discover_modules(project)
     exact = modules['modules'].get(module, {}).get('paths', [])
     matches = exact or [p for p in files if module.lower() in p.lower()]
     matches = sorted(matches, key=lambda p: (not p.endswith('.swift'), len(p), p))
@@ -83,12 +83,17 @@ def evidence_store(project: Path, key: str, status: str, *, source_paths: list[s
     if status not in {'passed', 'failed', 'blocked', 'not-run', 'not-applicable'}:
         raise ValueError('Invalid evidence status')
     files, base = _project_files(project)
+    files = inventory(project)['files']
+    if not source_paths:
+        raise ValueError('Evidence requires source paths')
     if any(p not in files for p in source_paths):
         raise ValueError('Source not included in index')
     dig = hashlib.sha256()
     for p in sorted(set(source_paths)):
         dig.update((p + ':' + files[p]['sha256']).encode())
     dig.update(environment.encode())
+    # Include the complete source inventory so additions/deletions also invalidate evidence.
+    dig.update(json.dumps(files, sort_keys=True).encode())
     result = {'key': key, 'status': status, 'source_paths': sorted(set(source_paths)), 'digest': dig.hexdigest(),
               'environment': environment, 'report': report, 'created_at': now(),
               'note': 'Evidence is invalidated by changed source digests; external dependencies still require revalidation'}
@@ -100,6 +105,7 @@ def evidence_status(project: Path, key: str, *, environment: str = '') -> dict:
     if not re.fullmatch(r'[\w-]{1,64}', key):
         raise ValueError('Invalid evidence key')
     files, base = _project_files(project)
+    files = inventory(project)['files']
     previous = json_read(base / 'evidence' / f'{key}.json')
     if previous is None:
         return {'key': key, 'valid': False, 'reason': 'missing'}
@@ -109,6 +115,7 @@ def evidence_status(project: Path, key: str, *, environment: str = '') -> dict:
             return {'key': key, 'valid': False, 'reason': 'source_missing'}
         dig.update((p + ':' + files[p]['sha256']).encode())
     dig.update(environment.encode())
+    dig.update(json.dumps(files, sort_keys=True).encode())
     return {'key': key, 'valid': dig.hexdigest() == previous['digest'], 'status': previous['status'],
             'reason': 'hash_match' if dig.hexdigest() == previous['digest'] else 'source_or_environment_changed',
-            'caution': 'Only local source index checked; external systems and source freshness may invalidate results'}
+            'caution': 'Live local source hashes checked; external systems and toolchain changes require revalidation'}

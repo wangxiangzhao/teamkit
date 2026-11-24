@@ -55,6 +55,7 @@ def test_dag(project):
         update_node(project, 'TASK', name, 'running')
         with pytest.raises(ValueError):
             update_node(project, 'TASK', name, 'completed')
+        (project / (name+'.log')).write_text('test fixture evidence')
         update_node(project, 'TASK', name, 'completed', evidence=[name+'.log'])
     assert summarize_plan(project, 'TASK')['unfinished'] == []
     with pytest.raises(FileExistsError):
