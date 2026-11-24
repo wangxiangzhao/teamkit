@@ -88,3 +88,14 @@ codex
 ```
 
 Activation appends a short, delimited policy to the project's existing `AGENTS.md` and writes a one-time backup if the file existed. `teamkit deactivate --approve` removes only TeamKit's policy. This is **instruction-guided native Codex delegation**, not an external automatic agent scheduler; the installed runtime must support subagents. No global `AGENTS.md` is modified.
+
+## Optional visual quality tools
+
+```bash
+python3 -m pip install pillow
+teamkit visual design.png simulator.png --tolerance 0.02
+teamkit optimize-image oversized.png candidate.png
+teamkit optimize-image oversized.png candidate.png --approve
+```
+
+Pixel difference analysis and image optimization are real deterministic tools, but do not replace Figma semantics, motion or interaction testing. Optimization never overwrites the original. Pillow is an optional runtime dependency.

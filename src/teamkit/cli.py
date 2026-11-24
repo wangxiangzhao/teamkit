@@ -16,6 +16,7 @@ from .metrics import record as record_metrics, summary as metrics_summary, roas_
 from .dispatch import run as dispatch_run
 from .skill_sources import candidates
 from .activation import activate, deactivate
+from .visual import compare_images, optimize_image
 from .skill_sources import candidates
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -144,6 +145,15 @@ def build_parser() -> argparse.ArgumentParser:
     off = subs.add_parser("deactivate", help="Remove TeamKit instructions only")
     off.add_argument("--project", type=Path, default=Path.cwd())
     off.add_argument("--approve", action="store_true")
+    visual = subs.add_parser("visual", help="Compare two screenshots by pixel difference")
+    visual.add_argument("reference", type=Path)
+    visual.add_argument("actual", type=Path)
+    visual.add_argument("--tolerance", type=float, default=0.02)
+    opt = subs.add_parser("optimize-image", help="Non-destructive image optimization")
+    opt.add_argument("source", type=Path)
+    opt.add_argument("output", type=Path)
+    opt.add_argument("--quality", type=int, default=85)
+    opt.add_argument("--approve", action="store_true")
     return p
 
 
@@ -215,6 +225,10 @@ def main(argv: list[str] | None = None) -> int:
             result = activate(args.project, approve=args.approve)
         elif args.command == "deactivate":
             result = deactivate(args.project, approve=args.approve)
+        elif args.command == "visual":
+            result = compare_images(args.reference, args.actual, tolerance=args.tolerance)
+        elif args.command == "optimize-image":
+            result = optimize_image(args.source, args.output, quality=args.quality, approve=args.approve)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
