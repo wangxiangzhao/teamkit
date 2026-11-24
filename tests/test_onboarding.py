@@ -81,3 +81,52 @@ def test_autoconfig_build_only_for_explicit_ios_scheme(tmp_path):
     argv = gates["build_command"]
     assert argv[argv.index("-derivedDataPath") + 1] == ".teamkit/xcode-derived"
     assert gates['test_command'] is None
+
+
+def _workspace(root, name):
+    workspace = root / f"{name}.xcworkspace"
+    workspace.mkdir()
+    (workspace / "contents.xcworkspacedata").write_text(
+        '<Workspace><FileRef location="group:Example.xcodeproj"/></Workspace>'
+    )
+    return workspace
+
+
+def test_workspace_uses_shared_project_scheme_and_preserves_custom_gate(tmp_path):
+    from teamkit.core import json_read, json_write
+
+    scheme = _scheme(tmp_path, "Example")
+    (tmp_path / "Example.xcodeproj/project.pbxproj").write_text("SDKROOT = iphoneos;")
+    workspace = _workspace(tmp_path, "Product")
+    contents_before = (workspace / "contents.xcworkspacedata").read_bytes()
+    result = onboard(tmp_path)
+    assert result["xcode_scheme"]["source"] == scheme.relative_to(tmp_path).as_posix()
+    config = tmp_path / ".teamkit/gates.json"
+    gates = json_read(config)
+    assert gates["build_command"][:5] == ["xcodebuild", "-workspace", "Product.xcworkspace", "-scheme", "Example"]
+    gates["build_command"] = ["custom-build"]
+    json_write(config, gates)
+    onboard(tmp_path)
+    assert json_read(config)["build_command"] == ["custom-build"]
+    assert (workspace / "contents.xcworkspacedata").read_bytes() == contents_before
+
+
+def test_multiple_workspaces_are_ambiguous_even_with_swift_package(tmp_path):
+    from teamkit.core import json_read
+
+    _scheme(tmp_path, "Example")
+    _workspace(tmp_path, "Product")
+    _workspace(tmp_path, "Alternate")
+    (tmp_path / "Package.swift").write_text("// mixed Xcode/SPM project")
+    result = onboard(tmp_path)
+    assert result["xcode_scheme"] is None
+    assert result["xcode_scheme_requires_review"]
+    assert json_read(tmp_path / ".teamkit/gates.json")["build_command"] is None
+
+
+def test_skip_symlinked_shared_scheme_directory(tmp_path):
+    scheme = _scheme(tmp_path, "Example")
+    schemes = scheme.parent
+    moved = schemes.rename(tmp_path / "outside-schemes")
+    schemes.symlink_to(moved, target_is_directory=True)
+    assert onboard(tmp_path)["xcode_scheme"] is None

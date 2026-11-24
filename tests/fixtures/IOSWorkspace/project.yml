@@ -1,0 +1,29 @@
+name: TeamKitSmoke
+options:
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  GENERATE_INFOPLIST_FILE: YES
+targets:
+  SmokeApp:
+    type: application
+    platform: iOS
+    sources: [App]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.teamkit.smoke
+  SmokeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: SmokeApp
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.teamkit.smoke.uitests
+schemes:
+  Smoke:
+    build:
+      targets:
+        SmokeApp: all
+    test:
+      targets:
+        - SmokeUITests

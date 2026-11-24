@@ -5,7 +5,6 @@ The only project-visible hook is a delimited AGENTS.md section, removable with d
 """
 from __future__ import annotations
 
-import os
 import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -19,37 +18,74 @@ from .privacy_audit import inspect_privacy
 from .event_audit import inventory_events
 
 
+def _read_xcode_xml(path: Path) -> ET.Element | None:
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
+            return None
+        return ET.parse(path).getroot()
+    except (ET.ParseError, OSError):
+        return None
+
+
+def _workspace_projects(workspace: Path) -> set[str]:
+    """Recognize direct, root-local workspace project references."""
+    contents = _read_xcode_xml(workspace / "contents.xcworkspacedata")
+    projects = set()
+    if contents is not None:
+        for ref in contents.findall("./FileRef"):
+            kind, _, name = ref.get("location", "").partition(":")
+            if kind in {"group", "container"} and Path(name).name == name and name.endswith(".xcodeproj"):
+                project = workspace.parent / name
+                if project.is_dir() and not project.is_symlink():
+                    projects.add(name)
+    return projects
+
+
 def _discover_shared_schemes(project: Path) -> dict:
-    """Read shared Xcode scheme XML; never invoke an Xcode build."""
+    """Read shared Xcode scheme XML and resolve explicit workspace membership."""
     root = project.resolve()
-    result = []
-    candidates = sorted(root.glob("*.xcodeproj")) + sorted(root.glob("*.xcworkspace"))
-    for container in candidates:
-        if container.is_symlink():
-            continue
-        schemes = container / "xcshareddata" / "xcschemes"
-        if not schemes.is_dir() or schemes.is_symlink():
+    projects = sorted(root.glob("*.xcodeproj"))
+    workspaces = sorted(root.glob("*.xcworkspace"))
+    containers = [item for item in projects + workspaces if not item.is_symlink() and item.is_dir()]
+    workspace_projects = {item.name: _workspace_projects(item) for item in containers if item in workspaces}
+    result = {}
+    for container in containers:
+        shared = container / "xcshareddata"
+        schemes = shared / "xcschemes"
+        if shared.is_symlink() or schemes.is_symlink() or not schemes.is_dir():
             continue
         for scheme in sorted(schemes.glob("*.xcscheme")):
-            if scheme.is_symlink() or scheme.stat().st_size > 1024 * 1024:
+            parsed = _read_xcode_xml(scheme)
+            if parsed is None or parsed.find("./BuildAction/BuildActionEntries/BuildActionEntry") is None:
                 continue
-            try:
-                parsed = ET.parse(scheme)
-                has_build = parsed.find(".//BuildActionEntry") is not None
-            except (ET.ParseError, OSError):
-                continue
-            if has_build:
-                result.append({
-                    "container": container.relative_to(root).as_posix(),
-                    "kind": "workspace" if container.suffix == ".xcworkspace" else "project",
+            memberships = [workspace for workspace, members in workspace_projects.items()
+                           if container.name in members]
+            # A project scheme can be used through each workspace that includes the project.
+            for target in memberships or [container.name]:
+                is_workspace = target in workspace_projects
+                related_projects = workspace_projects[target] if is_workspace else {container.name}
+                candidate = {
+                    "container": target,
+                    "kind": "workspace" if is_workspace else "project",
                     "scheme": scheme.stem,
                     "source": scheme.relative_to(root).as_posix(),
-                })
-    # Prefer workspace if one explicit workspace has the desired scheme.
-    # Multiple valid combinations remain ambiguous, never guess.
-    pairs = {(x["container"], x["scheme"]) for x in result}
-    result = [x for x in result if (x["container"], x["scheme"]) in pairs]
-    return {"candidates": result, "ambiguous": len(result) != 1}
+                    "projects": sorted(related_projects),
+                }
+                key = (target, scheme.stem)
+                previous = result.get(key, [])
+                result[key] = [candidate] if container.name == target else [*previous, candidate]
+    candidates = [item for pair in sorted(result) for item in result[pair]]
+    return {"candidates": candidates, "ambiguous": len(candidates) != 1}
+
+
+def _supports_ios(root: Path, projects: list[str]) -> bool:
+    for name in projects:
+        pbx = root / name / "project.pbxproj"
+        if pbx.is_file() and not pbx.is_symlink() and pbx.stat().st_size <= 16 * 1024 * 1024:
+            content = pbx.read_text(encoding="utf-8", errors="replace")
+            if "iphoneos" in content or "iphonesimulator" in content:
+                return True
+    return False
 
 
 def inspect_onboarding(project: Path) -> dict:
@@ -107,25 +143,26 @@ def onboard(project: Path, *, dry_run: bool = False) -> dict:
         # and explicit iOS SDK indicators are present. Never execute on onboarding.
         if not schemes["ambiguous"]:
             selected = schemes["candidates"][0]
-            xcodeproj = selected["container"] if selected["kind"] == "project" else None
-            pbx = root / xcodeproj / "project.pbxproj" if xcodeproj else None
-            if pbx and pbx.is_file() and not pbx.is_symlink():
-                content = pbx.read_text(encoding="utf-8", errors="replace")
-                if "iphoneos" in content or "iphonesimulator" in content:
-                    gates_file = root / ".teamkit" / "gates.json"
-                    gates = json_read(gates_file, {})
-                    if gates.get("build_command") is None:
-                        gates["build_command"] = ["xcodebuild", "-project", xcodeproj,
-                                                  "-scheme", selected["scheme"],
-                                                  "-configuration", "Debug",
-                                                  "-destination", "generic/platform=iOS Simulator",
-                                                  "-derivedDataPath", ".teamkit/xcode-derived",
-                                                  "CODE_SIGNING_ALLOWED=NO", "build"]
-                        json_write(gates_file, gates)
+            if _supports_ios(root, selected["projects"]):
+                gates_file = root / ".teamkit" / "gates.json"
+                if gates_file.is_symlink():
+                    raise ValueError("Refuse symlinked gate configuration")
+                gates = json_read(gates_file, {})
+                if gates.get("build_command") is None:
+                    gates["build_command"] = [
+                        "xcodebuild", "-" + selected["kind"], selected["container"],
+                        "-scheme", selected["scheme"], "-configuration", "Debug",
+                        "-destination", "generic/platform=iOS Simulator",
+                        "-derivedDataPath", ".teamkit/xcode-derived",
+                        "CODE_SIGNING_ALLOWED=NO", "build",
+                    ]
+                    json_write(gates_file, gates)
         # SwiftPM-only projects should not need hand-edited gates.json.
         # The scratch path lives inside TeamKit metadata, not .build in source.
-        if not schemes["candidates"] and (root / "Package.swift").is_file():
+        if not any(root.glob("*.xcodeproj")) and not any(root.glob("*.xcworkspace")) and (root / "Package.swift").is_file():
             gates_file = root / ".teamkit" / "gates.json"
+            if gates_file.is_symlink():
+                raise ValueError("Refuse symlinked gate configuration")
             gates = json_read(gates_file, {})
             scratch = ".teamkit/swift-build"
             if gates.get("build_command") is None:
