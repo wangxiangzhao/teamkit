@@ -1,3 +1,38 @@
+# TeamKit — one-command project onboarding
+
+Run in any existing iOS project after installing TeamKit:
+
+```bash
+cd /path/to/existing/project
+teamkit onboard
+codex
+```
+
+`teamkit onboard` is idempotent: it scans and indexes the project, detects shared Xcode schemes, creates scoped metadata, and attaches a reversible, delimited TeamKit instruction block to **project-local** `AGENTS.md`. It does **not** modify Swift/Objective-C source, Xcode project settings, signing, dependencies, credentials, global Codex settings, or run build scripts. It preserves pre-existing AGENTS content. Preview with `teamkit onboard --dry-run`, detach with `teamkit detach`. An existing Git-tracked AGENTS file will show a small, reversible diff; this is the integration hook, not a claim of zero Git changes.
+
+If a scheme is ambiguous, TeamKit reports it instead of choosing incorrectly. Missing Xcode/Figma or Codex authorization is reported rather than assumed. You can still start coding; only the affected verifications remain blocked.
+
+## Install
+
+```bash
+git clone https://github.com/wangxiangzhao/teamkit.git
+cd teamkit
+python3 -m pip install -e .
+teamkit install
+```
+
+To repair unmodified v0.1 roles without overwriting customizations: `teamkit install --repair-legacy-roles`.
+
+## What is real
+
+Project indexing, SHA-256 delta detection, advisory role matching, persisted task DAG and safety checks, scoped context selection, project skill extensions, resource size/duplicate checks, Pillow screenshot comparison and non-destructive image optimization, opt-in build/test execution, simple ROAS calculation and measured-metrics recording.
+
+## What is not an automatic guarantee
+
+An installed Codex version must support native subagents; TeamKit's master instructions guide their invocation but cannot force the runtime to create them. Figma MCP extraction, Xcode simulator workflows, StoreKit, analytics accounts and live ad revenue are only available when the corresponding applications, SDKs, permissions and test devices are present. An automatically detected Xcode scheme is not proof of successful build or test. `teamkit release` will remain blocked without actual verification.
+
+See full CLI help via `teamkit --help` and [scope](docs/V1_SCOPE.md).
+
 # TeamKit v1.0 — Local-first Codex engineering toolkit
 
 TeamKit provides reusable professional roles, scoped skills, project adaptation and deterministic task utilities. It is intentionally not a second LLM framework.

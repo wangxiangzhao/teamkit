@@ -17,6 +17,7 @@ from .dispatch import run as dispatch_run
 from .skill_sources import candidates
 from .activation import activate, deactivate
 from .visual import compare_images, optimize_image
+from .onboarding import onboard, detach
 from .skill_sources import candidates
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -169,6 +170,12 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("output", type=Path)
     opt.add_argument("--quality", type=int, default=85)
     opt.add_argument("--approve", action="store_true")
+    bootstrap = subs.add_parser("onboard", help="One-command safe existing-project adaptation")
+    bootstrap.add_argument("--project", type=Path, default=Path.cwd())
+    bootstrap.add_argument("--dry-run", action="store_true")
+    detached = subs.add_parser("detach", help="Remove only TeamKit's AGENTS instructions")
+    detached.add_argument("--project", type=Path, default=Path.cwd())
+    detached.add_argument("--dry-run", action="store_true")
     return p
 
 
@@ -244,6 +251,10 @@ def main(argv: list[str] | None = None) -> int:
             result = compare_images(args.reference, args.actual, tolerance=args.tolerance)
         elif args.command == "optimize-image":
             result = optimize_image(args.source, args.output, quality=args.quality, approve=args.approve)
+        elif args.command == "onboard":
+            result = onboard(args.project, dry_run=args.dry_run)
+        elif args.command == "detach":
+            result = detach(args.project, dry_run=args.dry_run)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
