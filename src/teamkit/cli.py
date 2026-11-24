@@ -22,6 +22,7 @@ from .audit import audit_project, safe_maintain
 from .live import attach, capability_report
 from .native import probe_native
 from .figma_contract import contract as figma_contract
+from .skill_audit import audit_skills
 from .skill_resolver import resolve as resolve_project_skills
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -279,6 +280,8 @@ def build_parser() -> argparse.ArgumentParser:
     figma.add_argument("--module", required=True)
     figma.add_argument("--project", type=Path)
     figma.add_argument("--write", action="store_true")
+    skillaudit = subs.add_parser("audit-skills", help="Inspect installed Skill metadata, references and provenance")
+    skillaudit.add_argument("--project", type=Path, default=Path.cwd())
     return p
 
 
@@ -364,6 +367,7 @@ def main(argv: list[str] | None = None) -> int:
                 if not args.dry_run:
                     result["capabilities"] = capability_report(args.project)
                     result["agent_skill_map"] = resolve_project_skills(args.project, persist=True)
+                    result["skill_audit"] = audit_skills(args.project)
                     result["existing_codex_session"] = {
                         "restart_required": False,
                         "new_agent_hot_registration_verified": False,
@@ -386,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
             result = probe_native(skip_simulator=args.skip_simulator)
         elif args.command == "figma-contract":
             result = figma_contract(args.json_file, module=args.module, project=args.project, write=args.write)
+        elif args.command == "audit-skills":
+            result = audit_skills(args.project)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
