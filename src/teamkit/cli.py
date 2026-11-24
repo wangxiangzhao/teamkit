@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -88,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "checkpoint":
             result = checkpoint(args.project, args.task_id, args.state, args.note)
         elif args.command == "resume":
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
+                raise ValueError("Invalid task ID")
             result = json_read(args.project.resolve() / ".teamkit" / "tasks" / (args.task_id + ".json"))
             if result is None:
                 raise FileNotFoundError("Task checkpoint not found")
