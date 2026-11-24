@@ -9,6 +9,12 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .orchestration import create_plan, ready_nodes, update_node, summarize_plan
+from .context_engine import compile_context, discover_modules, impact
+from .quality import scan_assets, run_gate, check_release
+from .metrics import record as record_metrics, summary as metrics_summary, roas_csv
+from .dispatch import run as dispatch_run
+from .skill_sources import candidates
 from .skill_sources import candidates
 from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
@@ -85,6 +91,54 @@ def build_parser() -> argparse.ArgumentParser:
     ctx.add_argument("--project", type=Path, default=Path.cwd())
     cand = subs.add_parser("candidates", help="Discover reviewed source candidates without installing anything")
     cand.add_argument("--capability", help="Filter by capability (e.g. swiftui, testing)")
+    cand = subs.add_parser("candidates", help="Read-only mature Skill candidates")
+    cand.add_argument("--capability")
+    mods = subs.add_parser("modules", help="Discover path-derived modules")
+    mods.add_argument("--project", type=Path, default=Path.cwd())
+    context = subs.add_parser("compile-context", help="Create bounded module context")
+    context.add_argument("module")
+    context.add_argument("--project", type=Path, default=Path.cwd())
+    imp = subs.add_parser("impact", help="Identify changed files and affected modules")
+    imp.add_argument("--project", type=Path, default=Path.cwd())
+    assets = subs.add_parser("assets", help="Scan image size and duplicate bytes")
+    assets.add_argument("--project", type=Path, default=Path.cwd())
+    assets.add_argument("--max-bytes", type=int, default=1024*1024)
+    gate = subs.add_parser("gate", help="Run explicitly approved build/test command")
+    gate.add_argument("gate", choices=["build","test"])
+    gate.add_argument("--project", type=Path, default=Path.cwd())
+    gate.add_argument("--approve-command", action="store_true")
+    gate.add_argument("--timeout", type=int, default=180)
+    rel = subs.add_parser("release", help="Conservative release readiness report")
+    rel.add_argument("--project", type=Path, default=Path.cwd())
+    dag = subs.add_parser("dag", help="Persistent task DAG and transitions")
+    dag.add_argument("action", choices=["create","ready","status","update"])
+    dag.add_argument("task_id")
+    dag.add_argument("description", nargs="?")
+    dag.add_argument("--project", type=Path, default=Path.cwd())
+    dag.add_argument("--node")
+    dag.add_argument("--state")
+    dag.add_argument("--evidence", action="append", default=[])
+    dag.add_argument("--path", action="append", default=[])
+    dag.add_argument("--intent", choices=sorted(ROUTES))
+    dag.add_argument("--max-concurrency", type=int, default=2)
+    metrics = subs.add_parser("metrics", help="Record or report measured usage")
+    metrics.add_argument("--project", type=Path, default=Path.cwd())
+    metrics.add_argument("--task-id")
+    metrics.add_argument("--input-tokens", type=int)
+    metrics.add_argument("--output-tokens", type=int)
+    metrics.add_argument("--cached-tokens", type=int)
+    metrics.add_argument("--duration-seconds", type=float)
+    metrics.add_argument("--outcome", default="unknown")
+    roas = subs.add_parser("roas", help="Calculate ROAS for complete cohorts in CSV")
+    roas.add_argument("csv", type=Path)
+    roas.add_argument("--window", type=int, default=30)
+    run = subs.add_parser("run", help="Opt-in Codex execution, dry-run by default")
+    run.add_argument("description")
+    run.add_argument("--project", type=Path, default=Path.cwd())
+    run.add_argument("--module")
+    run.add_argument("--intent", choices=sorted(ROUTES))
+    run.add_argument("--approve-execution", action="store_true")
+    run.add_argument("--timeout", type=int, default=3600)
     return p
 
 
@@ -117,6 +171,43 @@ def main(argv: list[str] | None = None) -> int:
             result = context_index(args.project, args.module)
         elif args.command == "candidates":
             result = candidates(args.capability)
+        elif args.command == "candidates":
+            result = candidates(args.capability)
+        elif args.command == "modules":
+            result = discover_modules(args.project)
+        elif args.command == "compile-context":
+            result = compile_context(args.project, args.module)
+        elif args.command == "impact":
+            result = impact(args.project)
+        elif args.command == "assets":
+            result = scan_assets(args.project, max_bytes=args.max_bytes)
+        elif args.command == "gate":
+            result = run_gate(args.project, args.gate, timeout=args.timeout, approve_command=args.approve_command)
+        elif args.command == "release":
+            result = check_release(args.project)
+        elif args.command == "dag":
+            if args.action == "create":
+                if not args.description:
+                    raise ValueError("dag create requires description")
+                result = create_plan(args.project, args.task_id, args.description, intent=args.intent)
+            elif args.action == "ready":
+                result = ready_nodes(args.project, args.task_id, max_running=args.max_concurrency)
+            elif args.action == "status":
+                result = summarize_plan(args.project, args.task_id)
+            else:
+                if not args.node or not args.state:
+                    raise ValueError("dag update requires --node and --state")
+                result = update_node(args.project, args.task_id, args.node, args.state,
+                                     paths=args.path or None, evidence=args.evidence)
+        elif args.command == "metrics":
+            result = record_metrics(args.project, args.task_id, input_tokens=args.input_tokens,
+                                    output_tokens=args.output_tokens, cached_tokens=args.cached_tokens,
+                                    duration_seconds=args.duration_seconds, outcome=args.outcome) if args.task_id else metrics_summary(args.project)
+        elif args.command == "roas":
+            result = roas_csv(args.csv, window=args.window)
+        elif args.command == "run":
+            result = dispatch_run(args.project, args.description, approve=args.approve_execution,
+                                  timeout=args.timeout, module=args.module, intent=args.intent)
         elif args.command == "resume":
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.task_id):
                 raise ValueError("Invalid task ID")
@@ -126,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             raise ValueError("Unknown command")
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 1 if result.get("status") == "failed" else 0
+        return 1 if result.get("status") in {"failed", "blocked"} else 0
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2

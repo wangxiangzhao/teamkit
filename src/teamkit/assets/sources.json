@@ -1,39 +1,32 @@
 {
   "schema_version": 1,
-  "policy": "External Skills are untrusted until source, licensing, platform compatibility, safety and practical tests have passed. Discovery is never installation.",
+  "policy": "External Skills are candidates, not auto-installed. Review source, license, SDK compatibility and tests before use.",
   "sources": [
     {
-      "id": "agentskills-spec",
-      "name": "Agent Skills open format",
+      "id": "agent-skills-spec",
       "repository": "https://github.com/agentskills/agentskills",
+      "kind": "spec",
       "capabilities": [
         "skill-spec",
         "validation"
       ],
-      "kind": "spec",
-      "licensing": "Apache-2.0 for specification; inspect actual skill license separately",
-      "status": "reference",
-      "note": "Specification, not a skill bundle."
+      "status": "reference"
     },
     {
       "id": "anthropic-skill-creator",
-      "name": "Anthropic Skill Creator",
       "repository": "https://github.com/anthropics/skills",
-      "skill_path": "skills/skill-creator",
+      "kind": "skill",
       "capabilities": [
         "skill-authoring",
         "skill-evals",
         "skill-testing"
       ],
-      "kind": "skill",
-      "licensing": "check individual LICENSE.txt before redistribution",
-      "status": "candidate",
-      "note": "Mature creation and evaluation workflow; audit scripts and runtime dependencies before installation."
+      "status": "candidate"
     },
     {
       "id": "twostraws-swiftui",
-      "name": "SwiftUI Agent Skill (Paul Hudson)",
       "repository": "https://github.com/twostraws/SwiftUI-Agent-Skill",
+      "kind": "skill",
       "capabilities": [
         "swiftui",
         "ios",
@@ -41,57 +34,20 @@
         "navigation",
         "animations"
       ],
-      "kind": "skill",
-      "licensing": "verify upstream LICENSE and attribution per installed version",
-      "status": "candidate",
-      "note": "Strong candidate for SwiftUI guidance; reconcile advice with actual project OS SDK baseline."
+      "status": "candidate"
     },
     {
-      "id": "twostraws-swift-directory",
-      "name": "Swift Agent Skills directory",
+      "id": "twostraws-directory",
       "repository": "https://github.com/twostraws/Swift-Agent-Skills",
+      "kind": "directory",
       "capabilities": [
         "swift",
         "ios",
         "concurrency",
         "testing",
-        "performance",
-        "accessibility"
-      ],
-      "kind": "directory",
-      "licensing": "per-linked-skill",
-      "status": "discovery-only",
-      "note": "Links to authors' individual Skills; do not install an entire directory."
-    },
-    {
-      "id": "thienqo-ios",
-      "name": "Swift iOS Skills Community",
-      "repository": "https://github.com/thienqo/ios-skills",
-      "capabilities": [
-        "swiftui",
-        "ios",
-        "uikit",
-        "testing",
-        "security",
         "performance"
       ],
-      "kind": "collection",
-      "licensing": "PolyForm Perimeter License 1.0.0 for repository; check each skill and business use",
-      "status": "candidate",
-      "note": "Current docs target newer Xcode/iOS; check availability and license for iOS 17 projects."
-    },
-    {
-      "id": "openai-plugins",
-      "name": "OpenAI Plugins",
-      "repository": "https://github.com/openai/plugins",
-      "capabilities": [
-        "codex",
-        "skill-examples"
-      ],
-      "kind": "reference",
-      "licensing": "review each component license",
-      "status": "reference",
-      "note": "Current OpenAI guidance supersedes deprecated openai/skills repo."
+      "status": "discovery-only"
     }
   ]
 }

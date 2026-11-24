@@ -1,10 +1,8 @@
-# TeamKit
+# TeamKit v1.0 — Local-first Codex engineering toolkit
 
-**Local-first Codex team configuration and deterministic project tooling.** TeamKit v0.1.0 is an early, tested **foundation**, not a finished autonomous multi-agent framework. It does not call LLM APIs or pretend to validate an Xcode build when Xcode is unavailable.
+TeamKit provides reusable professional roles, scoped skills, project adaptation and deterministic task utilities. It is intentionally not a second LLM framework.
 
-## Start
-
-Python 3.10+:
+## Install (Python 3.10+)
 
 ```bash
 git clone https://github.com/wangxiangzhao/teamkit.git
@@ -13,47 +11,69 @@ python3 -m pip install -e .
 teamkit doctor
 teamkit install --dry-run
 teamkit install
+```
+
+The installer creates only missing role and Skill files under `~/.codex/agents/` and `~/.agents/skills/`. Existing files, credentials, models, global configuration and approval settings are **not** modified. Verify role TOML compatibility with your installed Codex runtime.
+
+## Use in an existing project
+
+```bash
 cd /path/to/your/project
 teamkit init
 teamkit status
-teamkit skills
+teamkit modules
+teamkit compile-context Reader
+teamkit impact
 teamkit extend ios_engineer reader-workflow
-teamkit context Reader
-teamkit route '根据 Figma 开发完整 iOS 页面'
-teamkit plan '根据 Figma 开发完整 iOS 页面'
-teamkit check
-teamkit checkpoint TASK-001 running --note 'Implemented reader view'
-teamkit resume TASK-001
-teamkit sync
+teamkit candidates --capability swiftui
 ```
 
-`teamkit install` creates **only missing** `~/.codex/agents/*.toml` and `~/.agents/skills/*/SKILL.md` files. It does not alter existing `config.toml`, `AGENTS.md`, authentication or MCP credentials. The bundled role definitions are examples; verify syntax and compatibility with your installed Codex version. Local `teamkit` commands **do not spawn agents**: task routing produces advisory JSON for Codex Master. This avoids claiming autonomous dispatch where runtime integration has not been verified.
-
-`teamkit init` creates `.teamkit/` metadata in the selected project and does not modify product code. `teamkit check` currently validates indexed source fingerprints and records an inventory report. It is **not** an Xcode build, unit testing, privacy audit, Figma comparison or App Store signoff. These are future integrations.
-
-## Architecture
-
-- Eight bounded roles: product, design, ios_engineer, backend_engineer, quality, compliance, growth, analytics.
-- Six reusable foundation Skills; project skills are created on demand with `teamkit extend` and never overwrite existing content.
-- `teamkit context <module>` returns narrow candidate file paths, not a complete semantic dependency analysis.
-- Deterministic routing with ambiguity warnings, conservative dependency plans, no automatic LLM calls.
-- Project inventory and SHA-256 delta detection; skips .git, Pods, DerivedData, node_modules, .teamkit.
-- Project JSON metadata and task checkpoints for human/Codex recovery.
-- Safe installation that does not overwrite existing role files.
-- Python standard library runtime. Tests use pytest.
-
-## Safety and limitations
-
-TeamKit never executes project build scripts or destructive Git commands in 0.1.0. It does not send repository contents to the network. `init --force` rewrites TeamKit metadata, so don't use it on customized adapters. Role selection is a preliminary rule-based suggestion; Master must validate intent, risk and business constraints before delegation. Project-index checks are not sufficient quality evidence.
-
-## Development
+## Task routing and Codex execution
 
 ```bash
-python3 -m pip install -e .
-python3 -m pip install pytest
-python3 -m pytest -q
+teamkit route '根据 Figma 修改阅读器 UI'
+teamkit dag create READER-01 '根据 Figma 修改阅读器 UI'
+teamkit dag ready READER-01
+teamkit run '修复 ReaderView 中的 SwiftUI 编译错误' --module Reader
+teamkit run '修复 ReaderView 中的 SwiftUI 编译错误' --module Reader --approve-execution
 ```
 
-If working fully offline and setuptools is already installed, you may use `python3 -m pip install --no-build-isolation -e .`.
+The last command **explicitly opts into** running local `codex exec`; the default is a dry run. TeamKit asks Codex Master to use native subagents when the installed runtime supports them, but **does not directly spawn or guarantee child-agent execution**. No additional API service or credentials are created. CLI completion is not quality verification.
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for implemented versus planned milestones.
+## Engineering gates
+
+```bash
+teamkit check
+teamkit assets --max-bytes 1048576
+teamkit gate build  # returns not-run until explicitly configured
+teamkit gate build --approve-command
+teamkit gate test --approve-command
+teamkit release
+```
+
+Configure a real argv array in `.teamkit/gates.json`, for example:
+```json
+{"checks":["inventory"],"build_command":["xcodebuild","-project","App.xcodeproj","-scheme","App","build"],"test_command":null}
+```
+
+The build/test command is never executed without `--approve-command`. Release approval stays blocked until real build, test, UI, privacy and StoreKit checks are available. File hashes and asset size checks are not equivalent to App Store review.
+
+## ROAS and measured tokens
+
+```bash
+teamkit roas cohort.csv --window 30
+teamkit metrics
+teamkit metrics --task-id TASK-1 --input-tokens 10000 --output-tokens 3000
+```
+
+ROAS CSV needs independent `cohort,spend,revenue,days_observed,currency` columns, where revenue is cumulative through the requested observation window. Incomplete cohorts are excluded. Metrics are explicitly user/tool reported, not auto-detected.
+
+## Coverage and limitations
+
+**Implemented:** 8 role profiles, 6 bundled Skills, read-only mature external Skill candidates, indexed project scanning, SHA-256 sync, route advice, DAG status and file collision checks, scoped context generation, basic impact hints, evidence invalidation, asset duplicate/size scan, opt-in argv gates, opt-in Codex CLI bridge, checkpoints, ROAS computation, local token reports.
+
+**Requires actual Mac integration validation:** Codex native child-agent behavior, Xcode/Simulator/XCTest, Figma MCP and screenshot comparison, real StoreKit, revenue connectors and token savings benchmarks. No live platform tests have been claimed in CI.
+
+Run `python3 -m pip install pytest && python3 -m pytest -q`.
+
+See [V1 scope](docs/V1_SCOPE.md) for the distinction between local core coverage and real-device verification.
