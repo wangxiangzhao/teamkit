@@ -60,13 +60,27 @@ def roas_csv(csv_path: Path, *, window: int = 30) -> dict:
                 observed = int(row['days_observed'])
             except (ValueError, InvalidOperation, TypeError) as exc:
                 raise ValueError('Invalid numeric values in CSV') from exc
-            if spend < 0 or rev < 0 or observed < 0:
-                raise ValueError('Negative money or days')
-            ratio = round(rev / spend, 6) if spend and observed >= window else None
+            if not spend.is_finite() or not rev.is_finite() or spend < 0 or rev < 0 or observed < 0:
+                raise ValueError('Non-finite or negative money / days')
+            # A D45 cumulative revenue value is not D30 revenue. Older
+            # cohorts need an explicit revenue_as_of_day equal to the D-window.
+            as_of_raw = row.get('revenue_as_of_day')
+            try:
+                revenue_as_of_day = int(as_of_raw) if as_of_raw not in (None, '') else observed
+            except (TypeError, ValueError) as exc:
+                raise ValueError('Invalid revenue_as_of_day') from exc
+            if revenue_as_of_day < 0 or revenue_as_of_day > observed:
+                raise ValueError('Revenue date cannot exceed observation window')
+            eligible = observed >= window and revenue_as_of_day == window
+            reason = None if eligible else (
+                'cohort_not_mature' if observed < window else 'revenue_not_at_requested_window'
+            )
+            ratio = round(rev / spend, 6) if spend and eligible else None
             rows.append({'cohort': row['cohort'], 'currency': row.get('currency') or 'unspecified',
                          'spend': str(spend), 'revenue': str(rev),
-                         'days_observed': observed, 'd_window_roas': str(ratio) if ratio is not None else None,
-                         'complete_window': observed >= window})
+                         'days_observed': observed, 'revenue_as_of_day': revenue_as_of_day,
+                         'd_window_roas': str(ratio) if ratio is not None else None,
+                         'complete_window': eligible, 'excluded_reason': reason})
     currencies = set(r['currency'] for r in rows)
     if len(currencies) > 1:
         raise ValueError('Mixed currencies; normalize before aggregating')
@@ -77,4 +91,4 @@ def roas_csv(csv_path: Path, *, window: int = 30) -> dict:
             'total_spend': str(total_spend), 'total_revenue': str(total_rev),
             'aggregate_roas': str(round(total_rev / total_spend, 6)) if total_spend else None,
             'currency': next(iter(currencies), 'unspecified'),
-            'warning': 'Revenue must already be cumulative through window; incomplete cohorts excluded'}
+            'warning': 'Revenue must be explicitly scoped to requested D-window; immature or mismatched cohorts excluded'}
