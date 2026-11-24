@@ -24,7 +24,7 @@ from .native import probe_native
 from .figma_contract import contract as figma_contract
 from .skill_audit import audit_skills
 from .skill_resolver import resolve as resolve_project_skills
-from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, list_project_skills,
+from .core import (ROUTES, check_project, checkpoint, context_index, extend_project, init_project, json_read, json_write, list_project_skills,
                    project_status, route_task, sync_project, task_plan)
 
 ASSETS = Path(__file__).resolve().parent / "assets"
@@ -400,6 +400,37 @@ def main(argv: list[str] | None = None) -> int:
                 raise FileNotFoundError("Task checkpoint not found")
         else:
             raise ValueError("Unknown command")
+        if args.command == "onboard" and result.get("status") == "ready":
+            # Keep full evidence locally; don't flood Codex context with huge
+            # installed-file lists, simulator inventory, and every role matrix.
+            full = result
+            report = args.project.resolve() / ".teamkit" / "reports" / "onboard.json"
+            json_write(report, full)
+            caps = full.get("capabilities", {})
+            session = full.get("existing_codex_session", {})
+            install_summary = full.get("global_install", {})
+            result = {
+                "status": "ready", "project": full.get("project"),
+                "capabilities": {
+                    "configured_roles": caps.get("configured_roles"),
+                    "discovered_skill_count": caps.get("discovered_skill_count"),
+                },
+                "global_install": {
+                    "status": install_summary.get("status"),
+                    "installed_count": len(install_summary.get("installed", [])),
+                    "skipped_existing_count": len(install_summary.get("skipped_existing", [])),
+                    "warnings": install_summary.get("warnings", [])[:5],
+                },
+                "existing_codex_session": {
+                    "restart_required": False,
+                    "new_agent_hot_registration_verified": False,
+                    "instruction": "Continue this Codex task; read AGENTS.md TeamKit section and .teamkit/reports/onboard.json as needed. Preserve existing context and settings.",
+                },
+                "self_audit_status": full.get("self_audit", {}).get("status"),
+                "skill_audit_status": full.get("skill_audit", {}).get("status"),
+                "full_report": str(report),
+                "notice": "Connected tools are not equivalent to live authenticated agent/Figma verification.",
+            }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 1 if result.get("status") in {"failed", "blocked"} else 0
     except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
