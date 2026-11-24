@@ -1,0 +1,9 @@
+{
+  "source": "https://github.com/twostraws/SwiftUI-Agent-Skill",
+  "commit": "f2920b63995263f57b3e198674e89a602efba6d2",
+  "license": "MIT",
+  "author": "Paul Hudson",
+  "files_vendored": 14,
+  "review": "Static contents and license checked. No live user-project validation yet.",
+  "compatibility": "Existing project deployment target and toolchain override newer API recommendations."
+}

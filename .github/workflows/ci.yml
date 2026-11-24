@@ -16,3 +16,20 @@ jobs:
       - run: python -m pip install -e . pytest tomli pillow
       - run: python -m pytest -q
       - run: teamkit --help
+      - name: Verify the installable wheel includes complete Skill references
+        run: |
+          python -m pip install build
+          python -m build --wheel
+          python - <<'PY'
+          import glob, zipfile
+          files=glob.glob('dist/*.whl')
+          assert len(files)==1, files
+          with zipfile.ZipFile(files[0]) as wheel:
+              names=wheel.namelist()
+              expected=('teamkit/assets/skills/swiftui-pro/SKILL.md',
+                        'teamkit/assets/skills/swiftui-pro/LICENSE',
+                        'teamkit/assets/skills/swiftui-pro/references/navigation.md')
+              for item in expected:
+                  assert item in names, (item,names)
+          print('Full mature skill bundle packaged:', files[0])
+          PY

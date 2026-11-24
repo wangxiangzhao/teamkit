@@ -12,7 +12,7 @@ from .core import ROLES, json_write
 ROLE_SKILLS = {
     "product": ["project-adaptation"],
     "design": ["figma-contract", "quality-gates"],
-    "ios_engineer": ["ios-delivery", "token-efficiency", "figma-contract"],
+    "ios_engineer": ["ios-delivery", "swiftui-pro", "token-efficiency", "figma-contract"],
     "backend_engineer": ["project-adaptation"],
     "quality": ["quality-gates", "token-efficiency"],
     "compliance": ["quality-gates"],

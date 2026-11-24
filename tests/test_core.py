@@ -58,8 +58,8 @@ def test_checkpoint(tmp_path):
 
 def test_install_is_idempotent_and_preserves_custom(tmp_path):
     results = install(tmp_path)
-    assert len(results["installed"]) == 14
-    assert len(install(tmp_path)["skipped_existing"]) == 14
+    assert len(results["installed"]) >= 14
+    assert len(install(tmp_path)["skipped_existing"]) == len(results["installed"])
     agent = tmp_path / ".codex/agents/product.toml"
     agent.write_text("custom", encoding="utf-8")
     install(tmp_path)

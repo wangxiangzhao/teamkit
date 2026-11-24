@@ -19,7 +19,7 @@ teamkit = "teamkit.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-teamkit = ["assets/agents/*.toml", "assets/skills/*/SKILL.md", "assets/sources.json"]
+teamkit = ["assets/agents/*.toml", "assets/skills/*/SKILL.md", "assets/skills/*/references/*.md", "assets/skills/*/LICENSE", "assets/skills/*/UPSTREAM.json", "assets/sources.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

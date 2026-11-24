@@ -27,8 +27,8 @@ def test_install_no_overwrite_and_is_idempotent(tmp_path):
     home=tmp_path/'home'
     result=install(home)
     assert result['status']=='completed'
-    assert len(result['installed']) == 14
-    assert len(install(home)['skipped_existing']) == 14
+    assert len(result['installed']) >= 14
+    assert len(install(home)['skipped_existing']) == len(result['installed'])
     file=home/'.codex/agents/quality.toml'
     file.write_text('custom role')
     assert install(home)['status']=='completed'

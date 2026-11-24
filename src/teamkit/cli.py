@@ -117,18 +117,29 @@ def install(home: Path, *, dry_run: bool = False, repair_legacy: bool = False) -
                 repaired.append(str(dest))
                 continue
         copy_missing(item, [".codex", "agents"])
-    for skill_file in sorted((ASSETS / "skills").glob("*/SKILL.md")):
-        parent = safe_parent([".agents", "skills", skill_file.parent.name])
-        dest = home / ".agents" / "skills" / skill_file.parent.name / "SKILL.md"
-        if parent is None or dest.is_symlink():
-            warnings.append(f"Unsafe Skill destination: {dest}")
-            skipped.append(str(dest))
-        elif dest.exists():
-            skipped.append(str(dest))
-        elif dry_run or create_exclusive(dest, skill_file.read_bytes()):
-            installed.append(str(dest))
-        else:
-            skipped.append(str(dest))
+    for skill_dir in sorted((ASSETS / "skills").iterdir()):
+        if not skill_dir.is_dir() or skill_dir.is_symlink():
+            continue
+        if not (skill_dir / "SKILL.md").is_file():
+            continue
+        # Include references and license notices in mature Skill bundles.
+        # Preserve all existing user files and forbid symlink traversal.
+        for source_file in sorted(skill_dir.rglob("*")):
+            if not source_file.is_file() or source_file.is_symlink():
+                continue
+            relative = source_file.relative_to(skill_dir)
+            parts = [".agents", "skills", skill_dir.name, *relative.parts[:-1]]
+            parent = safe_parent(parts)
+            dest = home.joinpath(*parts, relative.name)
+            if parent is None or dest.is_symlink():
+                warnings.append(f"Unsafe Skill destination: {dest}")
+                skipped.append(str(dest))
+            elif dest.exists():
+                skipped.append(str(dest))
+            elif dry_run or create_exclusive(dest, source_file.read_bytes()):
+                installed.append(str(dest))
+            else:
+                skipped.append(str(dest))
     return {
         "status": "dry-run" if dry_run else ("partial" if warnings else "completed"),
         "installed": installed, "repaired_legacy_roles": repaired,

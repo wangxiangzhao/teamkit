@@ -34,7 +34,9 @@
         "navigation",
         "animations"
       ],
-      "status": "candidate"
+      "status": "bundled-pinned-static-reviewed",
+      "commit": "f2920b63995263f57b3e198674e89a602efba6d2",
+      "license": "MIT"
     },
     {
       "id": "twostraws-directory",
